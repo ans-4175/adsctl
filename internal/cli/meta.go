@@ -125,6 +125,8 @@ func (a *App) addMeta(root *cobra.Command) {
 	targeting.AddCommand(search)
 	a.addInsights(meta)
 	a.addReports(meta)
+	a.addInventory(meta)
+	a.addMonitor(meta)
 	a.addDiscovery(root, meta)
 }
 
