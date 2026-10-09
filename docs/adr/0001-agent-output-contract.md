@@ -1,0 +1,3 @@
+# Preserve platform fields within a consistent CLI output contract
+
+adsctl's first release serves AI agents inspecting Meta advertising. Default to JSON, preserve Meta's field names and resource data structure, and provide a consistent envelope for pagination and errors rather than translating resources into a platform-neutral advertising model; this lets agents use platform documentation directly while giving automation a predictable CLI contract. Commands do not prompt, successful data goes to stdout, diagnostics go to stderr, failures use predictable error codes and nonzero exit status, and `--output table` supports human inspection; exact envelope schemas remain to be designed.
