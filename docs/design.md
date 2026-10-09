@@ -1,6 +1,8 @@
 # adsctl: architecture and product design
 
-Status: proposed design. Research date: 2026-10-09. No CLI implementation or authenticated Meta API testing has been performed.
+Implementation is now available. This document preserves the design rationale; see [implementation status](implementation.md) for the current behavior and remaining validation gaps.
+
+Status: initial design, now implemented with the limits recorded above. Research date: 2026-10-09. Authenticated Meta API testing has not been performed.
 
 ## 1. Recommendation and scope
 

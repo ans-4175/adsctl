@@ -1,0 +1,13 @@
+{
+  "name": "Banner A",
+  "object_story_spec": {
+    "page_id": "505",
+    "link_data": {
+      "image_hash": "REPLACE_WITH_UPLOADED_IMAGE_HASH",
+      "link": "https://example.com/product",
+      "message": "Explore our product",
+      "name": "A clear product headline",
+      "call_to_action": {"type": "LEARN_MORE", "value": {"link": "https://example.com/product"}}
+    }
+  }
+}

@@ -1,6 +1,6 @@
 # adsctl: CLI UX and command reference
 
-All commands below are a proposed interface, not an existing implementation. Stages refer to the [architecture document](design.md). Examples use placeholder IDs; API payload examples illustrate shape and still require account/version-specific validation.
+This document records the original proposed interface. The initial executable now implements the Meta command groups, with the precise current limits listed in [implementation status](implementation.md). Use `adsctl commands` and command `--help` for compiled flags. Stages refer to the [architecture document](design.md). Examples use placeholder IDs; API payload examples illustrate shape and still require account/version-specific validation.
 
 ## 1. Command grammar and discoverability
 

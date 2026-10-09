@@ -1,0 +1,29 @@
+version: 1
+id: daily-health
+rules:
+  - id: rejected-ads
+    type: delivery-status
+    resource: ads
+    effective_status_in: [DISAPPROVED, WITH_ISSUES]
+  - id: daily-spend
+    type: metric-threshold
+    resource: account
+    date_preset: yesterday
+    metric: spend
+    operator: gt
+    threshold: '100.00'
+    currency: USD
+  - id: purchase-cpa
+    type: metric-threshold
+    resource: campaign
+    date_preset: last_7d
+    metric: cpa
+    operator: gt
+    threshold: '30.00'
+    action_type: offsite_conversion.fb_pixel_purchase
+    attribution: adset
+    action_report_time: impression
+    currency: USD
+    min_spend: '100.00'
+    min_actions: 5
+    exclude_recent_days: 1

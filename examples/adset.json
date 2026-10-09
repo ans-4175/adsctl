@@ -1,0 +1,10 @@
+{
+  "name": "Indonesia traffic",
+  "campaign_id": "456",
+  "daily_budget": 2500,
+  "billing_event": "IMPRESSIONS",
+  "optimization_goal": "LINK_CLICKS",
+  "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
+  "targeting": {"geo_locations": {"countries": ["ID"]}},
+  "status": "PAUSED"
+}
