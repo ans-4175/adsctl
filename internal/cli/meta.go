@@ -127,6 +127,7 @@ func (a *App) addMeta(root *cobra.Command) {
 	a.addReports(meta)
 	a.addInventory(meta)
 	a.addMonitor(meta)
+	a.addLaunch(meta)
 	a.addDiscovery(root, meta)
 }
 
