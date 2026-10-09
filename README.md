@@ -2,6 +2,8 @@
 
 A Go and Cobra CLI for inspecting, monitoring, creating and managing advertising. Meta is implemented first; Google is a future adapter. The CLI is designed for AI agents and shell automation: JSON by default, explicit account scope, external credentials, bounded reads and recoverable launch runs.
 
+The repository includes an [adsctl agent skill](skills/adsctl/SKILL.md) with reporting, monitoring, management and launch recovery workflows. Its `skills/adsctl` directory is a self-contained skill package for compatible agent runtimes.
+
 ## Build and verify
 
 Requires Go 1.25.1 or later. Persistent launch and monitor state currently uses macOS/Linux file locking. Other commands can compile for Windows; Windows persistent execution is explicitly rejected.

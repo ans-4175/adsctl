@@ -1,0 +1,4 @@
+interface:
+  display_name: "adsctl"
+  short_description: "Inspect, monitor, and manage Meta ads with adsctl"
+  default_prompt: "Use $adsctl to inspect my Meta ad account and carry out the requested reporting or management task."
