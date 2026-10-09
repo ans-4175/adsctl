@@ -23,6 +23,7 @@ type Client struct {
 	HTTP                               *http.Client
 	RequestTimeout, Backoff            time.Duration
 	Log                                io.Writer
+	pacing                             pacer
 }
 type Response struct {
 	Value map[string]any
@@ -51,6 +52,9 @@ func (c *Client) Request(ctx context.Context, method, path string, params url.Va
 		params.Set("appsecret_proof", hex.EncodeToString(h.Sum(nil)))
 	}
 	for attempt := 0; ; attempt++ {
+		if err := c.pace(ctx); err != nil {
+			return Response{}, err
+		}
 		r, err := c.once(ctx, method, path, params)
 		if err == nil {
 			return r, nil
@@ -117,6 +121,7 @@ func (c *Client) once(ctx context.Context, method, path string, params url.Value
 	return c.readResponse(method, resp)
 }
 func (c *Client) readResponse(method string, resp *http.Response) (Response, error) {
+	c.observe(resp.Header)
 	b, err := io.ReadAll(io.LimitReader(resp.Body, 32*1024*1024+1))
 	if err != nil || len(b) > 32*1024*1024 {
 		if method != "GET" {
@@ -129,8 +134,17 @@ func (c *Client) readResponse(method string, resp *http.Response) (Response, err
 	dec := json.NewDecoder(strings.NewReader(string(b)))
 	dec.UseNumber()
 	decodeErr := dec.Decode(&value)
+	if decodeErr == nil {
+		var extra any
+		if e := dec.Decode(&extra); !errors.Is(e, io.EOF) {
+			decodeErr = fmt.Errorf("extra JSON content")
+		}
+	}
+	if value != nil {
+		c.sanitize(value)
+	}
 	r := Response{Value: value, Usage: map[string]any{}}
-	for _, key := range []string{"X-Ad-Account-Usage", "X-Business-Use-Case-Usage", "X-Fb-Ads-Insights-Throttle", "X-Fb-Ads-Insights-Reach-Throttle", "Facebook-Api-Version"} {
+	for _, key := range []string{"X-App-Usage", "X-Ad-Account-Usage", "X-Business-Use-Case-Usage", "X-Fb-Ads-Insights-Throttle", "X-Fb-Ads-Insights-Reach-Throttle", "Facebook-Api-Version"} {
 		if v := resp.Header.Get(key); v != "" {
 			r.Usage[strings.ToLower(key)] = c.Redact(v)
 		}

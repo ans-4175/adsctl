@@ -48,12 +48,21 @@ func (d *Document) Validate() error {
 		}
 		seen[r.ID] = true
 		if r.Type == "delivery-status" {
+			allowed := map[string]bool{}
+			for _, status := range strings.Fields("ACTIVE ADSET_PAUSED ARCHIVED CAMPAIGN_PAUSED DELETED DISAPPROVED IN_PROCESS PAUSED PENDING_BILLING_INFO PENDING_REVIEW PREAPPROVED WITH_ISSUES") {
+				allowed[status] = true
+			}
+			for _, status := range r.Statuses {
+				if !allowed[status] {
+					return output.Fail("VALIDATION", "Unknown effective status in delivery rule.", 5)
+				}
+			}
 			if (r.Resource != "ads" && r.Resource != "adsets" && r.Resource != "campaigns") || len(r.Statuses) == 0 {
 				return output.Fail("VALIDATION", "Delivery rules require campaigns/adsets/ads and effective_status_in.", 5)
 			}
 			continue
 		}
-		if r.Type != "metric-threshold" || !strings.Contains("|account|campaign|adset|ad|", "|"+r.Resource+"|") || !metric.MatchString(r.Metric) || r.Preset == "" {
+		if r.Type != "metric-threshold" || !map[string]bool{"account": true, "campaign": true, "adset": true, "ad": true}[r.Resource] || !metric.MatchString(r.Metric) || r.Preset == "" {
 			return output.Fail("VALIDATION", "Invalid metric rule type, resource, metric or date preset.", 5)
 		}
 		n, ok := reporting.Number(r.Threshold)
@@ -97,6 +106,11 @@ func Evaluate(r Rule, row map[string]any) map[string]any {
 		id = fmt.Sprint(row["id"])
 	}
 	out := map[string]any{"rule_id": r.ID, "entity_id": id, "state": "clear", "data": row}
+	if id == "" || id == "<nil>" {
+		out["state"] = "unavailable"
+		out["reason"] = "missing_entity_id"
+		return out
+	}
 	if r.Type == "delivery-status" {
 		status, ok := row["effective_status"].(string)
 		if !ok {

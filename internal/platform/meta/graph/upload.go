@@ -21,6 +21,9 @@ func (c *Client) Upload(ctx context.Context, account, kind, path string) (Respon
 	if kind != "images" && kind != "videos" {
 		return Response{}, output.Fail("USAGE", "Unsupported media type.", 2)
 	}
+	if err := c.pace(ctx); err != nil {
+		return Response{}, err
+	}
 	f, err := os.Open(path)
 	if err != nil {
 		return Response{}, output.Fail("INPUT", "Cannot open upload file.", 2)

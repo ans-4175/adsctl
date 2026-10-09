@@ -47,7 +47,11 @@ func (a *App) addDiscovery(root, meta *cobra.Command) {
 		if len(rows) == 0 {
 			return output.Fail("SCHEMA_UNSUPPORTED", "Resource or operation is not implemented.", 2)
 		}
-		return a.emit(c, map[string]any{"resource": args[0], "operation": operation, "commands": rows, "coverage": "implemented CLI subset; provider validates conditional fields", "api_version": a.opts.APIVersion, "writable_fields": metaschema.Fields(args[0], operation), "nested_fields": "native JSON; provider validates conditional requirements"})
+		version := a.opts.APIVersion
+		if version == "" {
+			version = "v25.0"
+		}
+		return a.emit(c, map[string]any{"resource": args[0], "operation": operation, "commands": rows, "coverage": "implemented CLI subset; provider validates conditional fields", "api_version": version, "writable_fields": metaschema.Fields(args[0], operation), "nested_fields": "native JSON; provider validates conditional requirements"})
 	})
 	get.Args = cobra.ExactArgs(1)
 	get.Flags().StringVar(&operation, "operation", "", "Operation name")
@@ -82,7 +86,7 @@ func commandRows(root *cobra.Command, platform, capability string) []any {
 		}
 		c.LocalNonPersistentFlags().VisitAll(add)
 		c.InheritedFlags().VisitAll(add)
-		rows = append(rows, map[string]any{"path": c.CommandPath(), "usage": c.UseLine(), "description": c.Short, "effect": effect, "flags": flags, "schema_version": "1"})
+		rows = append(rows, map[string]any{"path": c.CommandPath(), "usage": c.UseLine(), "description": c.Short, "effect": effect, "flags": flags, "schema_version": "1", "output_formats": []string{"json", "jsonl", "table"}})
 	}
 	walk(root)
 	sort.Slice(rows, func(i, j int) bool {

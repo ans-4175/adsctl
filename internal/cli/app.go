@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"adsctl/internal/output"
@@ -55,7 +57,17 @@ func (a *App) emit(cmd *cobra.Command, data any) error {
 	for k, v := range a.meta {
 		meta[k] = v
 	}
-	return output.Write(a.Out, a.opts.Output, output.New(data, meta))
+	env := output.New(data, meta)
+	if rows, ok := data.([]any); ok && len(rows) == 0 {
+		if q, ok := meta["query"].(url.Values); ok {
+			env.Warnings = append(env.Warnings, output.Warning{Code: "NO_ROWS", Message: "No Insights rows returned; this does not establish zero performance or metric availability."})
+			breakdowns := q.Get("breakdowns")
+			if strings.Contains(breakdowns, "impression_device") || strings.Contains(breakdowns, "hourly_stats_aggregated_by_audience_time_zone") || strings.Contains(breakdowns, "frequency_value") {
+				env.Warnings = append(env.Warnings, output.Warning{Code: "BREAKDOWN_ACCESS", Message: "Some accounts require opt-in for this synchronous breakdown; check access or use an explicit async Insights job."})
+			}
+		}
+	}
+	return output.Write(a.Out, a.opts.Output, env)
 }
 func group(use, short string) *cobra.Command {
 	c := &cobra.Command{Use: use, Short: short}
@@ -75,6 +87,9 @@ func (a *App) Root() *cobra.Command {
 		a.started = true
 		if a.opts.Output != "json" && a.opts.Output != "jsonl" && a.opts.Output != "table" {
 			return output.Fail("USAGE", "Output must be json, jsonl or table.", 2)
+		}
+		if a.opts.Color != "auto" && a.opts.Color != "always" && a.opts.Color != "never" {
+			return output.Fail("USAGE", "Color must be auto, always or never.", 2)
 		}
 		if a.opts.Timeout <= 0 || a.opts.RequestTimeout <= 0 {
 			return output.Fail("USAGE", "Timeouts must be positive.", 2)
@@ -109,6 +124,25 @@ func (a *App) Root() *cobra.Command {
 	root.AddCommand(completion)
 	a.addConfig(root)
 	a.addMeta(root)
+	annotateHelp(root)
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return output.Fail("USAGE", fmt.Sprint(err), 2) })
 	return root
+}
+
+func annotateHelp(root *cobra.Command) {
+	for _, c := range root.Commands() {
+		annotateHelp(c)
+	}
+	if root.Annotations["effect"] == "" {
+		return
+	}
+	if root.Name() == "docs" || root.Name() == "completion" {
+		return
+	}
+	effect := root.Annotations["effect"]
+	root.Long = root.Short + ".\n\nEffect: " + effect + ". Data defaults to a versioned JSON envelope on stdout.\nErrors and verbose diagnostics use stderr. --output jsonl and table are also available."
+	if effect == "write" {
+		root.Long += "\nAdvertising writes require explicit --profile and --account, plus a write-mode profile.\nCommands exposing --dry-run do not modify advertising in that mode. Unknown create outcomes exit 10 and require reconciliation."
+	}
+	root.Example = "  " + root.CommandPath() + " --help\n  adsctl commands --platform meta --capability " + effect
 }

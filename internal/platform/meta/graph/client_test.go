@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	"adsctl/internal/output"
 )
 
 func fixtureClient(t *testing.T, h http.HandlerFunc) *Client {
@@ -87,5 +89,53 @@ func TestOverfullPageContinuationDoesNotLoseRows(t *testing.T) {
 	two, err := c.List(context.Background(), "me", nil, PageOptions{Scope: "p", Cursor: one.Cursor, PageSize: 1, MaxItems: 10})
 	if err != nil || !two.Complete || len(two.Rows) != 2 {
 		t.Fatal(two, err)
+	}
+}
+
+func TestRedactsUnknownResponseCredentials(t *testing.T) {
+	c := New("fixture", "v25.0")
+	value := map[string]any{"access_token": "different-page-token", "nested": []any{map[string]any{"appsecret_proof": "proof"}}, "url": "https://graph.facebook.com/path?access_token=different-page-token&after=cursor"}
+	c.sanitize(value)
+	raw, _ := json.Marshal(value)
+	if strings.Contains(string(raw), "different-page-token") || strings.Contains(string(raw), `"proof"`) {
+		t.Fatal(string(raw))
+	}
+	if !strings.Contains(string(raw), "after=cursor") {
+		t.Fatal(string(raw))
+	}
+}
+func TestPacingHonorsCancellation(t *testing.T) {
+	c := New("fixture", "v25.0")
+	header := http.Header{}
+	header.Set("Retry-After", "10")
+	c.observe(header)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := c.pace(ctx); err == nil || output.AsError(err).Exit != 7 {
+		t.Fatal(err)
+	}
+	if !highUsage(map[string]any{"account": []any{map[string]any{"call_count": float64(95)}}}) {
+		t.Fatal("usage not detected")
+	}
+}
+
+func TestCredentialedRequestsDoNotFollowRedirects(t *testing.T) {
+	reached := false
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reached = true
+		t.Error("redirect forwarded credentials")
+	}))
+	defer target.Close()
+	c := fixtureClient(t, func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, target.URL, http.StatusFound) })
+	if _, err := c.Request(context.Background(), "GET", "me", nil); err == nil || reached {
+		t.Fatal(err, reached)
+	}
+}
+func TestProviderErrorExitClassification(t *testing.T) {
+	for code, exit := range map[int]int{190: 3, 200: 4, 100: 5, 4: 6} {
+		e := providerError(map[string]any{"code": code, "message": "fixture"}, "POST")
+		if e.Exit != exit || e.Retryable {
+			t.Fatal(code, e)
+		}
 	}
 }

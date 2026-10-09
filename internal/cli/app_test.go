@@ -9,9 +9,6 @@ import (
 
 func TestLocalCommands(t *testing.T) {
 	for _, args := range [][]string{{"--help"}, {"meta", "--help"}, {"version"}, {"config", "path"}} {
-		if args[0] == "meta" {
-			continue
-		}
 		var out, errOut bytes.Buffer
 		if code := Run(context.Background(), args, &bytes.Buffer{}, &out, &errOut); code != 0 {
 			t.Fatalf("%v: %d %s", args, code, errOut.String())

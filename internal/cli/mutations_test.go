@@ -23,7 +23,7 @@ func TestMutationDefaultsPausedAndVerifies(t *testing.T) {
 			_, _ = fmt.Fprint(w, `{"id":"456"}`)
 			return
 		}
-		_, _ = fmt.Fprint(w, `{"id":"456","account_id":"123","status":"PAUSED","effective_status":"PAUSED"}`)
+		_, _ = fmt.Fprint(w, `{"id":"456","account_id":"123","status":"PAUSED","effective_status":"PAUSED","name":"test","objective":"OUTCOME_TRAFFIC","special_ad_categories":[]}`)
 	})
 	err := executeTest(a, []string{"--config", path, "meta", "campaigns", "create", "--profile", "test", "--account", "123", "--name", "test", "--objective", "OUTCOME_TRAFFIC", "--special-ad-categories", "NONE"})
 	if err != nil || posts != 1 || !bytes.Contains(out.Bytes(), []byte(`"state": "verified"`)) {
@@ -89,5 +89,61 @@ func TestVerificationFailurePreservesAppliedReceipt(t *testing.T) {
 	err := executeTest(a, []string{"--config", path, "meta", "campaigns", "create", "--profile", "test", "--account", "123", "--name", "test", "--objective", "OUTCOME_TRAFFIC", "--special-ad-categories", "NONE"})
 	if err == nil || output.AsError(err).Exit != 9 || !bytes.Contains(out.Bytes(), []byte(`"id": "456"`)) || !bytes.Contains(out.Bytes(), []byte(`"state": "applied_unverified"`)) {
 		t.Fatal(err, out.String())
+	}
+}
+
+func TestBudgetCurrencyAndObservedAmount(t *testing.T) {
+	for _, scenario := range []string{"success", "currency", "campaign-owned", "not-converged"} {
+		t.Run(scenario, func(t *testing.T) {
+			posts := 0
+			amount := "1000"
+			a, out, _, path := testApp(t, func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == "POST" {
+					posts++
+					if err := r.ParseForm(); err != nil {
+						t.Error(err)
+					}
+					if r.Form.Get("daily_budget") != "9007199254740993" {
+						t.Error("budget lost precision", r.Form)
+					}
+					if scenario != "not-converged" {
+						amount = r.Form.Get("daily_budget")
+					}
+					_, _ = fmt.Fprint(w, `{"success":true}`)
+					return
+				}
+				switch r.URL.Path {
+				case "/v25.0/act_123":
+					currency := "USD"
+					if scenario == "currency" {
+						currency = "IDR"
+					}
+					_, _ = fmt.Fprintf(w, `{"id":"act_123","currency":%q}`, currency)
+				case "/v25.0/100":
+					budget := "0"
+					if scenario == "campaign-owned" {
+						budget = "1000"
+					}
+					_, _ = fmt.Fprintf(w, `{"id":"100","account_id":"123","daily_budget":%q}`, budget)
+				default:
+					_, _ = fmt.Fprintf(w, `{"id":"456","account_id":"123","campaign_id":"100","daily_budget":%q}`, amount)
+				}
+			})
+			err := executeTest(a, []string{"--config", path, "meta", "adsets", "budget", "set", "456", "--profile", "test", "--account", "123", "--daily-budget-minor", "9007199254740993", "--currency", "USD"})
+			switch scenario {
+			case "success":
+				if err != nil || posts != 1 {
+					t.Fatal(err, posts, out.String())
+				}
+			case "not-converged":
+				if err == nil || output.AsError(err).Exit != 9 || posts != 1 {
+					t.Fatal(err, posts, out.String())
+				}
+			default:
+				if err == nil || posts != 0 {
+					t.Fatal(err, posts)
+				}
+			}
+		})
 	}
 }

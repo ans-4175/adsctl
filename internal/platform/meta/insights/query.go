@@ -100,10 +100,14 @@ func (q Query) Values(account string) (string, url.Values, error) {
 		b, _ := json.Marshal(map[string]string{"since": q.Since, "until": q.Until})
 		v.Set("time_range", string(b))
 	}
-	for key, s := range map[string]string{"breakdowns": q.Breakdowns, "action_breakdowns": q.ActionBreakdowns, "sort": q.Sort} {
+	for key, s := range map[string]string{"breakdowns": q.Breakdowns, "action_breakdowns": q.ActionBreakdowns} {
 		if s != "" {
 			v.Set(key, s)
 		}
+	}
+	if q.Sort != "" {
+		b, _ := json.Marshal(strings.Split(q.Sort, ","))
+		v.Set("sort", string(b))
 	}
 	if q.Filtering != nil {
 		b, err := json.Marshal(q.Filtering)

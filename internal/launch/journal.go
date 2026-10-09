@@ -47,7 +47,7 @@ func (r Run) IDs() map[string]string {
 	return out
 }
 func (r Run) Validate() error {
-	if r.Version != 1 || r.ID == "" || len(r.Steps) != len(r.Plan.Steps) {
+	if r.Version != 1 || r.ID == "" || r.Activation == nil || len(r.Steps) != len(r.Plan.Steps) {
 		return output.Fail("JOURNAL_INVALID", "Invalid launch journal.", 2)
 	}
 	if err := r.Plan.Validate(true); err != nil {
@@ -68,7 +68,7 @@ func (r Run) Validate() error {
 }
 func (r Run) Ready() bool {
 	for _, s := range r.Plan.Steps {
-		if r.Steps[s.Key].State != "verified" {
+		if r.Steps[s.Key].State != "verified" || r.Steps[s.Key].ID == "" {
 			return false
 		}
 	}

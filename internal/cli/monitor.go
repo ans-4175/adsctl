@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"time"
 
+	"adsctl/internal/config"
 	"adsctl/internal/document"
 	"adsctl/internal/monitoring"
 	"adsctl/internal/output"
@@ -49,6 +51,9 @@ func (a *App) addMonitor(meta *cobra.Command) {
 				return err
 			}
 			if portfolio != "" {
+				ctx, cancel := context.WithTimeout(c.Context(), a.opts.Timeout)
+				defer cancel()
+				c.SetContext(ctx)
 				if c.Flags().Changed("profile") || c.Flags().Changed("account") {
 					return output.Fail("USAGE", "Portfolio cannot be combined with explicit profile/account.", 2)
 				}
@@ -64,10 +69,14 @@ func (a *App) addMonitor(meta *cobra.Command) {
 				failed, fired := false, false
 				seen := map[string]bool{}
 				for _, m := range members {
-					if seen[m.Account] {
+					normalizedAccount, normalizeErr := config.Account(m.Account)
+					if normalizeErr != nil {
+						return normalizeErr
+					}
+					if seen[normalizedAccount] {
 						return output.Fail("CONFIG", "Duplicate portfolio account.", 2)
 					}
-					seen[m.Account] = true
+					seen[normalizedAccount] = true
 					child := *a
 					child.opts.Profile = m.Profile
 					child.opts.Account = m.Account

@@ -11,6 +11,7 @@ import (
 	"adsctl/internal/launch"
 	"adsctl/internal/output"
 	"adsctl/internal/platform/meta/graph"
+	"adsctl/internal/platform/meta/schema"
 	"adsctl/internal/state"
 	"github.com/spf13/cobra"
 )
@@ -462,63 +463,13 @@ func verifyStep(r *runtime, s launch.Step, id string, ids map[string]string) err
 	if err != nil {
 		return err
 	}
-	if !matchesPayload(expected, observed.Value) {
+	if !schema.MatchesPayload(expected, observed.Value) {
 		return output.Fail("RESOURCE_DRIFT", "Remote object differs from planned fields; review before continuing.", 9)
 	}
 	return nil
 }
 func verificationFields(resource string, p map[string]any) string {
-	return joinFields(schemaKeys(p), map[string]string{"campaigns": "objective", "adsets": "campaign_id", "ads": "adset_id", "creatives": "object_story_spec"}[resource])
-}
-func schemaKeys(p map[string]any) string {
-	keys := []string{"id", "account_id"}
-	for k := range p {
-		keys = append(keys, k)
-	}
-	return joinFields(strings.Join(keys, ","))
-}
-func matchesPayload(expected, observed map[string]any) bool {
-	for k, v := range expected {
-		actual, ok := observed[k]
-		if k == "creative" {
-			want, wok := v.(map[string]any)
-			got, gok := actual.(map[string]any)
-			if wok && gok {
-				id := got["id"]
-				if id == nil {
-					id = got["creative_id"]
-				}
-				if fmt.Sprint(want["creative_id"]) != fmt.Sprint(id) {
-					return false
-				}
-				continue
-			}
-		}
-		if !ok || !matchesValue(v, actual) {
-			return false
-		}
-	}
-	return true
-}
-func matchesValue(want, got any) bool {
-	switch v := want.(type) {
-	case map[string]any:
-		g, ok := got.(map[string]any)
-		return ok && matchesPayload(v, g)
-	case []any:
-		g, ok := got.([]any)
-		if !ok || len(v) != len(g) {
-			return false
-		}
-		for i := range v {
-			if !matchesValue(v[i], g[i]) {
-				return false
-			}
-		}
-		return true
-	default:
-		return fmt.Sprint(want) == fmt.Sprint(got)
-	}
+	return joinFields(schema.Keys(p), map[string]string{"campaigns": "objective", "adsets": "campaign_id", "ads": "adset_id", "creatives": "object_story_spec"}[resource])
 }
 func reconcileRun(r *runtime, dir string, run *launch.Run, key, id string, retry bool) error {
 	s, ok := run.Plan.Step(key)
@@ -577,10 +528,26 @@ func activateRun(r *runtime, dir string, run *launch.Run, dry bool) error {
 		if err = verifyParents(r, s.Resource, p); err != nil {
 			return err
 		}
+		observed, err := r.Client.Request(r.Ctx, "GET", id, url.Values{"fields": {joinFields(verificationFields(s.Resource, p), "status,effective_status")}})
+		if err != nil {
+			return err
+		}
+		status := observed.Value["status"]
+		if status != "PAUSED" && status != "ACTIVE" {
+			return output.Fail("RESOURCE_DRIFT", "Only paused or active recorded objects can be activated.", 9)
+		}
+		delete(p, "status")
+		if !schema.MatchesPayload(p, observed.Value) {
+			return output.Fail("RESOURCE_DRIFT", "Run fields changed since the reviewed plan; activation blocked.", 9)
+		}
+		run.Activation[s.Key] = launch.Checkpoint{State: "planned", ID: id, Receipt: map[string]any{"observed": observed.Value, "scope": "Recorded objects only; existing parents retain their configured state."}}
 	}
 	if dry {
 		for i, s := range order {
-			run.Activation[s.Key] = launch.Checkpoint{State: "planned", ID: run.Steps[s.Key].ID, Receipt: map[string]any{"order": i + 1, "requested_status": "ACTIVE"}}
+			cp := run.Activation[s.Key]
+			cp.Receipt["order"] = i + 1
+			cp.Receipt["requested_status"] = "ACTIVE"
+			run.Activation[s.Key] = cp
 		}
 		return nil
 	}

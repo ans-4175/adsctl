@@ -1,15 +1,18 @@
 package cli
 
 import (
+	"context"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/big"
 	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"adsctl/internal/config"
@@ -31,11 +34,12 @@ func (a *App) addReports(meta *cobra.Command) {
 		cmd := action(op, "Generate a complete "+op+" report", "read", nil)
 		q := addQueryFlags(cmd, true)
 		q.Query.Level = "account"
+		cmd.Flags().Lookup("level").DefValue = "account"
 		q.Page.All = true
 		f := &reportFlags{}
 		flags := cmd.Flags()
 		flags.StringVar(&f.Portfolio, "portfolio", "", "Named read-only account portfolio")
-		flags.IntVar(&f.Concurrency, "concurrency", 2, "Maximum portfolio concurrency (current executor runs sequentially)")
+		flags.IntVar(&f.Concurrency, "concurrency", 2, "Maximum concurrent portfolio accounts, 1..16")
 		flags.BoolVar(&f.IncludePartial, "include-partial-period", false, "Allow periods including the current account-local day")
 		if op == "rank" {
 			flags.StringVar(&f.Metric, "metric", "spend", "Native metric or cpa/roas")
@@ -76,7 +80,12 @@ func (a *App) partial(c *cobra.Command, data any, err error) error {
 		env := output.New(data, a.meta)
 		env.OK = false
 		env.Error = output.AsError(err)
-		env.Meta["partial"] = true
+		if output.AsError(err).Exit == 11 {
+			env.Meta["complete"] = true
+		} else {
+			env.Meta["partial"] = true
+			env.Meta["complete"] = false
+		}
 		env.Meta["command"] = c.CommandPath()
 		_ = output.Write(a.Out, a.opts.Output, env)
 	}
@@ -89,6 +98,12 @@ func (a *App) report(c *cobra.Command, r *runtime, op string, q *queryFlags, f *
 	local.Page.Cursor = ""
 	if op != "export" {
 		local.Query.Increment = "all_days"
+	}
+	if op == "compare" && (local.Query.Breakdowns != "" || local.Query.ActionBreakdowns != "") {
+		return nil, output.Fail("USAGE", "Comparison requires entity totals without breakdowns.", 2)
+	}
+	if op == "summary" && local.Query.Breakdowns != "" {
+		return nil, output.Fail("USAGE", "Summary requires account totals without breakdowns; use reports breakdown.", 2)
 	}
 	if op == "summary" {
 		local.Query.Level = "account"
@@ -103,7 +118,7 @@ func (a *App) report(c *cobra.Command, r *runtime, op string, q *queryFlags, f *
 		if local.Query.Breakdowns != "" {
 			return nil, output.Fail("USAGE", "Ranking requires entity totals without breakdowns.", 2)
 		}
-		local.Query.Fields = joinFields(local.Query.Fields, local.Query.Level+"_id,"+local.Query.Level+"_name", f.Metric)
+		local.Query.Fields = joinFields(local.Query.Fields, "spend", local.Query.Level+"_id,"+local.Query.Level+"_name", f.Metric)
 		if f.Metric == "cpa" || f.Metric == "roas" {
 			fields := []string{}
 			for _, field := range strings.Split(local.Query.Fields, ",") {
@@ -151,7 +166,30 @@ func (a *App) report(c *cobra.Command, r *runtime, op string, q *queryFlags, f *
 	}
 	switch op {
 	case "summary":
-		return map[string]any{"account_metrics": result.Rows, "availability": "Missing fields are unavailable, not zero."}, nil
+		contributorsQuery := url.Values{}
+		for key, values := range v {
+			contributorsQuery[key] = append([]string(nil), values...)
+		}
+		contributorsQuery.Set("level", "campaign")
+		fields := []string{"campaign_id", "campaign_name"}
+		for _, field := range strings.Split(local.Query.Fields, ",") {
+			if field != "account_id" && field != "account_name" {
+				fields = append(fields, field)
+			}
+		}
+		contributorsQuery.Set("fields", joinFields(strings.Join(fields, ",")))
+		contributors, contributorErr := r.Client.List(r.Ctx, r.Account+"/insights", contributorsQuery, local.Page)
+		a.meta["contributors_query"] = contributorsQuery
+		data := map[string]any{"account_metrics": result.Rows, "campaign_contributors": contributors.Rows, "availability": "Missing fields are unavailable, not zero; account totals are not summed from contributors."}
+		if contributorErr != nil {
+			a.meta["complete"] = false
+			return data, contributorErr
+		}
+		if !contributors.Complete {
+			a.meta["complete"] = false
+			return data, output.Fail("INCOMPLETE", "Contributor input exceeded row bound.", 9)
+		}
+		return data, nil
 	case "compare":
 		var previousStart, previousEnd time.Time
 		if f.CompareSince != "" || f.CompareUntil != "" {
@@ -185,6 +223,7 @@ func (a *App) report(c *cobra.Command, r *runtime, op string, q *queryFlags, f *
 		a.meta["comparison_query"] = oldQ
 		return compareRows(result.Rows, old.Rows, local.Query.Level), nil
 	case "rank":
+		a.meta["metric"] = map[string]any{"name": f.Metric, "action_type": f.Action, "unit": map[string]string{"cpa": "account_currency_major", "roas": "ratio", "spend": "account_currency_major"}[f.Metric], "formula": map[string]string{"cpa": "spend / matching actions.value", "roas": "matching action_values.value / spend"}[f.Metric]}
 		return rankRows(result.Rows, f)
 	case "export":
 		return a.exportRows(result.Rows, f)
@@ -355,6 +394,9 @@ func (a *App) exportRows(rows []any, f *reportFlags) (any, error) {
 	return map[string]any{"directory": f.Directory, "rows": len(rows), "complete": true}, nil
 }
 func (a *App) portfolioReport(c *cobra.Command, op string, q *queryFlags, f *reportFlags) error {
+	ctx, cancel := context.WithTimeout(c.Context(), a.opts.Timeout)
+	defer cancel()
+	c.SetContext(ctx)
 	if c.Flags().Changed("profile") || c.Flags().Changed("account") {
 		return output.Fail("USAGE", "Portfolio cannot be combined with profile/account flags.", 2)
 	}
@@ -372,38 +414,81 @@ func (a *App) portfolioReport(c *cobra.Command, op string, q *queryFlags, f *rep
 	if !ok {
 		return output.Fail("CONFIG", "Unknown portfolio.", 2)
 	}
+	if f.Concurrency > 16 {
+		return output.Fail("USAGE", "Concurrency must be 1..16.", 2)
+	}
+	if q.FilterFile == "-" {
+		return output.Fail("USAGE", "Portfolio filters require a file path; stdin cannot be consumed by multiple accounts.", 2)
+	}
 	seen := map[string]bool{}
-	results := []any{}
-	failed := false
-	for _, member := range members {
-		account, _ := config.Account(member.Account)
+	normalized := make([]config.Member, len(members))
+	for i, member := range members {
+		account, e := config.Account(member.Account)
+		if e != nil {
+			return e
+		}
 		if seen[account] {
-			results = append(results, map[string]any{"account": account, "error": "duplicate_account"})
-			failed = true
-			continue
+			return output.Fail("CONFIG", "Duplicate portfolio account.", 2)
 		}
 		seen[account] = true
-		child := *a
-		child.opts.Profile = member.Profile
-		child.opts.Account = account
-		child.meta = nil
-		r, err := child.runtime(c, true, false)
-		var data any
-		if err == nil {
-			data, err = child.report(c, r, op, q, f)
-			r.Cancel()
-		}
-		env := output.New(data, child.meta)
-		if err != nil {
-			env.OK = false
-			env.Error = output.AsError(err)
+		normalized[i] = config.Member{Profile: member.Profile, Account: account}
+	}
+	results := make([]any, len(members))
+	jobs := make(chan int)
+	var workers sync.WaitGroup
+	diagnostics := &lockedWriter{writer: a.Err}
+	for worker := 0; worker < min(f.Concurrency, len(members)); worker++ {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			for i := range jobs {
+				member := normalized[i]
+				child := *a
+				child.opts.Profile = member.Profile
+				child.opts.Account = member.Account
+				child.meta = nil
+				child.Err = diagnostics
+				r, e := child.runtime(c, true, false)
+				var data any
+				if e == nil {
+					data, e = child.report(c, r, op, q, f)
+					r.Cancel()
+				}
+				env := output.New(data, child.meta)
+				if e != nil {
+					env.OK = false
+					env.Error = output.AsError(e)
+				}
+				results[i] = env
+			}
+		}()
+	}
+	for i := range normalized {
+		jobs <- i
+	}
+	close(jobs)
+	workers.Wait()
+	failed := false
+	for _, v := range results {
+		if !v.(output.Envelope).OK {
 			failed = true
 		}
-		results = append(results, env)
 	}
+
 	a.meta = map[string]any{"platform": "meta", "portfolio": f.Portfolio, "complete": !failed}
 	if failed {
 		return a.partial(c, results, output.Fail("PARTIAL", "Some portfolio accounts could not be reported.", 9))
 	}
 	return a.emit(c, results)
+}
+
+type lockedWriter struct {
+	mu     sync.Mutex
+	writer io.Writer
+}
+
+func (w *lockedWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.writer.Write(p)
 }

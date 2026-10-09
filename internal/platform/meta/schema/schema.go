@@ -13,11 +13,15 @@ import (
 )
 
 type Field struct {
-	Type     string `json:"type"`
-	Required bool   `json:"required_on_create,omitempty"`
+	Type     string   `json:"type"`
+	Required bool     `json:"required_on_create,omitempty"`
+	Enum     []string `json:"enum,omitempty"`
 }
 
 func Fields(resource, operation string) map[string]Field {
+	if operation != "create" && operation != "update" {
+		return nil
+	}
 	common := map[string]string{"name": "string", "adlabels": "array"}
 	switch resource {
 	case "campaigns":
@@ -73,7 +77,17 @@ func Fields(resource, operation string) map[string]Field {
 	required := map[string][]string{"campaigns": {"name", "objective", "special_ad_categories"}, "adsets": {"name", "campaign_id", "billing_event", "optimization_goal", "targeting"}, "ads": {"name", "adset_id", "creative"}, "creatives": {"name"}}
 	out := map[string]Field{}
 	for k, v := range common {
-		out[k] = Field{Type: v}
+		f := Field{Type: v}
+		if k == "status" {
+			f.Enum = []string{"ACTIVE", "PAUSED"}
+			if operation == "update" {
+				f.Enum = append(f.Enum, "ARCHIVED", "DELETED")
+			}
+		}
+		if k == "objective" {
+			f.Enum = []string{"OUTCOME_AWARENESS", "OUTCOME_ENGAGEMENT", "OUTCOME_LEADS", "OUTCOME_SALES", "OUTCOME_TRAFFIC", "OUTCOME_APP_PROMOTION"}
+		}
+		out[k] = f
 	}
 	if operation == "create" {
 		for _, k := range required[resource] {
@@ -118,6 +132,15 @@ func Validate(resource, operation string, p map[string]any) error {
 			_, valid = v.([]any)
 		case "boolean":
 			_, valid = v.(bool)
+		}
+		if len(f.Enum) > 0 {
+			allowed := false
+			for _, value := range f.Enum {
+				if v == value {
+					allowed = true
+				}
+			}
+			valid = valid && allowed
 		}
 		if !valid {
 			return output.Fail("VALIDATION", fmt.Sprintf("%s requires %s.", k, f.Type), 5)

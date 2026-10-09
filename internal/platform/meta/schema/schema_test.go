@@ -30,3 +30,15 @@ func TestExactIntegerPayload(t *testing.T) {
 		t.Fatal(p)
 	}
 }
+
+func TestObservedNativeSubsetComparison(t *testing.T) {
+	want := map[string]any{"daily_budget": "2500", "targeting": map[string]any{"countries": []any{"ID"}}, "creative": map[string]any{"creative_id": "123"}}
+	got := map[string]any{"daily_budget": 2500, "targeting": map[string]any{"countries": []any{"ID"}, "provider_default": true}, "creative": map[string]any{"id": "123", "name": "existing"}}
+	if !MatchesPayload(want, got) {
+		t.Fatal("native normalization rejected")
+	}
+	got["daily_budget"] = 2000
+	if MatchesPayload(want, got) {
+		t.Fatal("budget difference accepted")
+	}
+}

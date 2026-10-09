@@ -40,6 +40,9 @@ func (c *Client) List(ctx context.Context, path string, params url.Values, o Pag
 	sum := sha256.Sum256([]byte(o.Scope + "|" + c.Version + "|" + path + "|" + q.Encode()))
 	finger := hex.EncodeToString(sum[:])
 	cp := continuation{Fingerprint: finger}
+	if len(o.Cursor) > 8<<20 {
+		return r, output.Fail("CURSOR_INVALID", "Cursor exceeds 8 MiB.", 2)
+	}
 	if o.Cursor != "" {
 		b, err := base64.RawURLEncoding.DecodeString(o.Cursor)
 		if err != nil {
@@ -92,6 +95,11 @@ func (c *Client) List(ctx context.Context, path string, params url.Values, o Pag
 		rows, ok := resp.Value["data"].([]any)
 		if !ok {
 			return r, output.Fail("RESPONSE_INVALID", "Expected a Graph data array.", 8)
+		}
+		for _, row := range rows {
+			if _, ok := row.(map[string]any); !ok {
+				return r, output.Fail("RESPONSE_INVALID", "Graph collection rows must be JSON objects.", 8)
+			}
 		}
 		cp.After = ""
 		cp.More = false

@@ -62,8 +62,14 @@ func (a *App) prepareQuery(c *cobra.Command, r *runtime, q *queryFlags) (string,
 		if err != nil {
 			return "", nil, err
 		}
-		if err = json.Unmarshal(b, &q.Query.Filtering); err != nil {
+		decoder := json.NewDecoder(strings.NewReader(string(b)))
+		decoder.UseNumber()
+		if err = decoder.Decode(&q.Query.Filtering); err != nil {
 			return "", nil, output.Fail("USAGE", "Filter file must contain a JSON array.", 2)
+		}
+		var extra any
+		if q.Query.Filtering == nil || decoder.Decode(&extra) != io.EOF {
+			return "", nil, output.Fail("USAGE", "Filter file requires one JSON array.", 2)
 		}
 	}
 	if q.Query.Level == "" && q.Query.Campaign == "" && q.Query.Adset == "" && q.Query.Ad == "" {
@@ -88,6 +94,9 @@ func (a *App) prepareQuery(c *cobra.Command, r *runtime, q *queryFlags) (string,
 	a.meta["timezone"] = account.Value["timezone_name"]
 	a.meta["query"] = v
 	a.meta["attribution_mode"] = q.Query.Attribution
+	if q.Query.Attribution == "adset" {
+		a.meta["attribution_scope"] = "Per-adset settings; windows may differ across contributing ad sets."
+	}
 	return path, v, nil
 }
 func (a *App) readFile(path string) ([]byte, error) {
@@ -215,6 +224,7 @@ func getJob(r *runtime, id string) (map[string]any, error) {
 	return v.Value, nil
 }
 func pollJob(r *runtime, id string) (map[string]any, error) {
+	delay := time.Second
 	for {
 		v, err := getJob(r, id)
 		if err != nil {
@@ -229,7 +239,8 @@ func pollJob(r *runtime, id string) (map[string]any, error) {
 			e.Provider = v
 			return nil, e
 		}
-		timer := time.NewTimer(time.Second)
+		timer := time.NewTimer(delay)
+		delay = min(delay*2, 10*time.Second)
 		select {
 		case <-r.Ctx.Done():
 			timer.Stop()
