@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"adsctl/internal/output"
+	metaschema "adsctl/internal/platform/meta/schema"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -46,7 +47,7 @@ func (a *App) addDiscovery(root, meta *cobra.Command) {
 		if len(rows) == 0 {
 			return output.Fail("SCHEMA_UNSUPPORTED", "Resource or operation is not implemented.", 2)
 		}
-		return a.emit(c, map[string]any{"resource": args[0], "operation": operation, "commands": rows, "coverage": "implemented CLI subset; provider validates conditional fields", "api_version": a.opts.APIVersion})
+		return a.emit(c, map[string]any{"resource": args[0], "operation": operation, "commands": rows, "coverage": "implemented CLI subset; provider validates conditional fields", "api_version": a.opts.APIVersion, "writable_fields": metaschema.Fields(args[0], operation), "nested_fields": "native JSON; provider validates conditional requirements"})
 	})
 	get.Args = cobra.ExactArgs(1)
 	get.Flags().StringVar(&operation, "operation", "", "Operation name")

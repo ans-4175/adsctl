@@ -114,8 +114,14 @@ func (c *Client) once(ctx context.Context, method, path string, params url.Value
 		return Response{}, e
 	}
 	defer func() { _ = resp.Body.Close() }()
+	return c.readResponse(method, resp)
+}
+func (c *Client) readResponse(method string, resp *http.Response) (Response, error) {
 	b, err := io.ReadAll(io.LimitReader(resp.Body, 32*1024*1024+1))
 	if err != nil || len(b) > 32*1024*1024 {
+		if method != "GET" {
+			return Response{}, output.Fail("MUTATION_UNKNOWN", "Mutation acknowledgment could not be read; reconcile before retrying.", 10)
+		}
 		return Response{}, output.Fail("RESPONSE_INVALID", "Graph response could not be read within 32 MiB.", 8)
 	}
 	b = []byte(c.Redact(string(b)))
@@ -146,6 +152,9 @@ func (c *Client) once(ctx context.Context, method, path string, params url.Value
 		return r, e
 	}
 	if decodeErr != nil || value == nil {
+		if method != "GET" {
+			return r, output.Fail("MUTATION_UNKNOWN", "Mutation returned an unreadable acknowledgment; reconcile before retrying.", 10)
+		}
 		return r, output.Fail("RESPONSE_INVALID", "Expected a Graph JSON object.", 8)
 	}
 	return r, nil

@@ -197,6 +197,12 @@ func (a *App) addResource(meta *cobra.Command, resource string) {
 		f.StringVar(&adset, "adset", "", "Parent ad set ID")
 	}
 	g.AddCommand(list)
+	if resource == "images" || resource == "videos" {
+		a.addMedia(g, resource)
+	}
+	if isOwned(resource) && resource != "audiences" {
+		a.addMutations(g, resource)
+	}
 	if resource != "images" {
 		var getFields string
 		get := action("get ID", "Read "+resource+" by ID", "read", func(c *cobra.Command, args []string) error {
@@ -214,6 +220,14 @@ func (a *App) addResource(meta *cobra.Command, resource string) {
 			}
 			if err != nil {
 				return err
+			}
+			if resource == "videos" {
+				if err = verifyVideo(r, id); err != nil {
+					return err
+				}
+			}
+			if resource == "accounts" {
+				a.meta["account_id"] = id
 			}
 			if isOwned(resource) {
 				if err = verify(r, resource, id); err != nil {
