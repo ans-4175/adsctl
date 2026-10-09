@@ -3,8 +3,10 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"time"
 
 	"adsctl/internal/output"
@@ -17,6 +19,10 @@ type Options struct {
 	Verbose                                             bool
 }
 type App struct {
+	baseURL    string
+	httpClient *http.Client
+	started    bool
+
 	In       io.Reader
 	Out, Err io.Writer
 	opts     Options
@@ -32,6 +38,10 @@ func Run(ctx context.Context, args []string, in io.Reader, out, errOut io.Writer
 	root.SetErr(errOut)
 	if err := root.ExecuteContext(ctx); err != nil {
 		e := output.AsError(err)
+		var typed *output.Error
+		if !errors.As(err, &typed) && !a.started {
+			e = output.Fail("USAGE", err.Error(), 2)
+		}
 		env := output.New(nil, a.meta)
 		env.OK = false
 		env.Error = e
@@ -62,6 +72,7 @@ func (a *App) Root() *cobra.Command {
 	root := &cobra.Command{Use: "adsctl", Short: "Manage advertising across platforms with an agent-friendly CLI", SilenceUsage: true, SilenceErrors: true}
 	root.RunE = func(cmd *cobra.Command, _ []string) error { return cmd.Help() }
 	root.PersistentPreRunE = func(_ *cobra.Command, _ []string) error {
+		a.started = true
 		if a.opts.Output != "json" && a.opts.Output != "jsonl" && a.opts.Output != "table" {
 			return output.Fail("USAGE", "Output must be json, jsonl or table.", 2)
 		}
@@ -97,6 +108,7 @@ func (a *App) Root() *cobra.Command {
 	completion.Args = cobra.ExactArgs(1)
 	root.AddCommand(completion)
 	a.addConfig(root)
+	a.addMeta(root)
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return output.Fail("USAGE", fmt.Sprint(err), 2) })
 	return root
 }
