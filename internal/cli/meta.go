@@ -123,6 +123,8 @@ func (a *App) addMeta(root *cobra.Command) {
 	search.Flags().StringVar(&typ, "type", "", "Meta search type, such as adgeolocation")
 	search.Flags().StringVar(&query, "query", "", "Search text")
 	targeting.AddCommand(search)
+	a.addInsights(meta)
+	a.addReports(meta)
 	a.addDiscovery(root, meta)
 }
 
