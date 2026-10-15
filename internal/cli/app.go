@@ -15,6 +15,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// version is set by release builds with -ldflags "-X adsctl/internal/cli.version=...".
+var version = "dev"
+
 type Options struct {
 	Config, Profile, Account, APIVersion, Output, Color string
 	Timeout, RequestTimeout                             time.Duration
@@ -106,7 +109,7 @@ func (a *App) Root() *cobra.Command {
 	f.DurationVar(&a.opts.Timeout, "timeout", 2*time.Minute, "Total operation deadline")
 	f.DurationVar(&a.opts.RequestTimeout, "request-timeout", 30*time.Second, "Per-request deadline")
 	f.BoolVar(&a.opts.Verbose, "verbose", false, "Redacted request diagnostics on stderr")
-	root.AddCommand(action("version", "Print build version", "local", func(c *cobra.Command, _ []string) error { return a.emit(c, map[string]any{"version": "dev"}) }))
+	root.AddCommand(action("version", "Print build version", "local", func(c *cobra.Command, _ []string) error { return a.emit(c, map[string]any{"version": version}) }))
 	completion := action("completion SHELL", "Generate shell completion", "local", func(c *cobra.Command, args []string) error {
 		switch args[0] {
 		case "bash":

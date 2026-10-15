@@ -1,8 +1,9 @@
-.PHONY: build install fmt fmt-check vet lint test check tools
+.PHONY: build install fmt fmt-check vet lint test check tools release-check release-snapshot
+VERSION ?= dev
 build:
-	go build -trimpath -o bin/adsctl ./cmd/adsctl
+	go build -trimpath -ldflags "-X adsctl/internal/cli.version=$(VERSION)" -o bin/adsctl ./cmd/adsctl
 install:
-	go install ./cmd/adsctl
+	go install -trimpath -ldflags "-X adsctl/internal/cli.version=$(VERSION)" ./cmd/adsctl
 fmt:
 	gofmt -w $$(find cmd internal -name '*.go')
 fmt-check:
@@ -16,3 +17,7 @@ test:
 check: fmt-check vet lint test build
 tools:
 	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
+release-check:
+	goreleaser check
+release-snapshot: release-check
+	goreleaser release --snapshot --clean --skip=publish

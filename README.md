@@ -19,6 +19,34 @@ make install
 
 CI repeats these checks on pull requests and pushes. Tests use local HTTP fixtures, including pagination, lossless IDs, account ownership, exact metrics, write verification, ambiguous outcomes, launch recovery and activation order. No test spends money or calls a live Meta account.
 
+## Distributions and releases
+
+GitHub [releases](https://github.com/imrenagicom/adsctl/releases) contain binaries for Linux, macOS (`darwin`) and Windows, each for x86-64 (`amd64`) and ARM64 (`arm64`). Linux/macOS downloads are `.tar.gz`; Windows downloads are `.zip`. Every archive includes the agent skill and README, and `checksums.txt` records SHA-256 hashes. Windows persistent launch/monitor execution remains unsupported as described above.
+
+GoReleaser v2.18.3 builds the distributions with CGO disabled and injects the version through `-X adsctl/internal/cli.version=...`. `adsctl version` reports that value in its normal JSON envelope. Local builds default to `dev`; override it with `make build VERSION=0.1.0` or `make install VERSION=0.1.0`.
+
+semantic-release uses the existing `v0.1.0` tag as its baseline. After the Go checks and distribution checks pass, pushes to `main` trigger releases based on Conventional Commits:
+
+| Commit | Release |
+| --- | --- |
+| `fix: correct report totals` | Patch |
+| `feat: add a reporting command` | Minor |
+| `feat!: change the output contract` or a `BREAKING CHANGE:` footer | Major |
+| `docs:`, `test:`, `chore:`, `ci:` | No release by themselves |
+
+Use a Conventional Commit title when squash-merging a pull request. semantic-release builds the proposed version before creating its tag, then publishes generated release notes, the six archives and checksums to GitHub. The release job performs publishing directly, because tags created with `GITHUB_TOKEN` do not trigger another Actions workflow. It uses the built-in token with `contents: write`; no npm publishing or npm token is needed. Repository rules must allow this workflow to create version tags. The CI workflow can also be run manually on `main` to release any unreleased commits.
+
+For local checks, install GoReleaser v2.18.3 and Node.js 24.10 or later:
+
+```sh
+npm ci
+make release-snapshot   # build all six archives without publishing
+# With GitHub credentials available, inspect the next version without publishing:
+npm run release:dry-run
+```
+
+Generated distributions live in the ignored `dist/` directory. CI uploads snapshot distributions as workflow artifacts for review. The npm package and lockfile only manage release tooling; Git tags remain the source of release versions. If GitHub publishing fails after a version tag is pushed, recover that tagged release with GoReleaser from a clean checkout of that tag (`goreleaser release --clean`, with `GITHUB_TOKEN` set); rerunning semantic-release alone will not republish an existing tag.
+
 ## Configure external credentials
 
 Create a Meta developer app, grant it the required Marketing API access and asset permissions, and supply a token through your runner's secret store. The CLI consumes that token; it does not provision the app, perform OAuth or refresh tokens.

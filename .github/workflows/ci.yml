@@ -1,7 +1,9 @@
 name: ci
 on:
   push:
+    branches: ['**']
   pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
@@ -21,3 +23,62 @@ jobs:
         with:
           name: coverage
           path: coverage.out
+  release-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: node --check release.config.cjs
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          version: v2.18.3
+          install-only: true
+      - run: goreleaser check
+      - run: goreleaser release --snapshot --clean --skip=publish
+      - uses: actions/upload-artifact@v4
+        with:
+          name: distributions
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt
+          if-no-files-found: error
+  release:
+    needs: [check, release-check]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: release-main
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          version: v2.18.3
+          install-only: true
+      - run: npm run release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
