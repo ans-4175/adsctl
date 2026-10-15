@@ -1,0 +1,3 @@
+interface:
+  display_name: "adsctl Setup"
+  short_description: "Set up adsctl and obtain Meta API credentials"

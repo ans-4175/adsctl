@@ -29,6 +29,7 @@ archives:
     files:
       - README.md
       - skills/adsctl/**
+      - skills/adsctl-setup/**
 
 checksum:
   name_template: checksums.txt

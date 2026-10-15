@@ -4,6 +4,8 @@ A Go and Cobra CLI for inspecting, monitoring, creating and managing advertising
 
 The repository includes an [adsctl agent skill](skills/adsctl/SKILL.md) with reporting, monitoring, management and launch recovery workflows. Its `skills/adsctl` directory is a self-contained skill package for compatible agent runtimes.
 
+For installation and Meta API credentials, use the [adsctl-setup skill](skills/adsctl-setup/SKILL.md). It covers developer apps, user and system-user tokens, asset permissions, secret references, and bounded authentication checks. Both skills are included in release archives.
+
 ## Build and verify
 
 Requires Go 1.25.1 or later. Persistent launch and monitor state currently uses macOS/Linux file locking. Other commands can compile for Windows; Windows persistent execution is explicitly rejected.
