@@ -15,7 +15,7 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - run: make fmt-check vet test build
+      - run: make fmt-check vet test build plugin-check
       - uses: golangci/golangci-lint-action@v8
         with:
           version: v2.12.2
@@ -45,6 +45,7 @@ jobs:
           install-only: true
       - run: goreleaser check
       - run: goreleaser release --snapshot --clean --skip=publish
+      - run: python3 scripts/check-plugin.py --archives dist
       - uses: actions/upload-artifact@v4
         with:
           name: distributions

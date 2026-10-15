@@ -1,0 +1,14 @@
+{
+  "name": "adsctl",
+  "description": "adsctl setup and Meta advertising workflows for local agents.",
+  "owner": {
+    "name": "Imre Nagi"
+  },
+  "plugins": [
+    {
+      "name": "adsctl",
+      "source": "./",
+      "description": "Set up adsctl and inspect, report on, monitor, and manage Meta advertising."
+    }
+  ]
+}

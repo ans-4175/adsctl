@@ -8,11 +8,11 @@ module.exports = {
     [
       "@semantic-release/exec",
       {
-        verifyConditionsCmd: "goreleaser check",
+        verifyConditionsCmd: "make release-check",
         // Build the real version before semantic-release creates its tag.
         // The tag does not exist yet, so only Git validation is skipped.
         prepareCmd:
-          "GORELEASER_CURRENT_TAG=${nextRelease.gitTag} goreleaser release --clean --skip=publish,validate",
+          "GORELEASER_CURRENT_TAG=${nextRelease.gitTag} goreleaser release --clean --skip=publish,validate && python3 scripts/check-plugin.py --archives dist",
       },
     ],
     [

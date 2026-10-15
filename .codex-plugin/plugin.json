@@ -1,0 +1,30 @@
+{
+  "name": "adsctl",
+  "version": "0.1.0",
+  "description": "Set up adsctl and inspect, report on, monitor, and manage Meta advertising with explicit account scope.",
+  "author": {
+    "name": "Imre Nagi"
+  },
+  "homepage": "https://github.com/imrenagicom/adsctl",
+  "repository": "https://github.com/imrenagicom/adsctl",
+  "keywords": ["adsctl", "meta", "advertising", "reporting"],
+  "skills": "./skills/",
+  "requires_local_executor": true,
+  "extensions": {
+    "com.openai": {
+      "onboardingSkill": "./skills/adsctl-setup/SKILL.md"
+    }
+  },
+  "interface": {
+    "displayName": "adsctl",
+    "shortDescription": "Set up, inspect, and manage Meta ads",
+    "longDescription": "Install the adsctl CLI, configure external Meta credentials, inspect advertising performance, and carry out explicitly scoped management and campaign launch workflows.",
+    "developerName": "Imre Nagi",
+    "category": "Productivity",
+    "capabilities": ["Read", "Write"],
+    "defaultPrompt": [
+      "Use the adsctl setup skill to install the CLI and configure Meta API access.",
+      "Use adsctl to summarize performance for my selected Meta ad account."
+    ]
+  }
+}

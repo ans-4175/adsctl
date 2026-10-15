@@ -6,6 +6,22 @@ The repository includes an [adsctl agent skill](skills/adsctl/SKILL.md) with rep
 
 For installation and Meta API credentials, use the [adsctl-setup skill](skills/adsctl-setup/SKILL.md). It covers developer apps, user and system-user tokens, asset permissions, secret references, and bounded authentication checks. Both skills are included in release archives.
 
+## Codex and Claude Code plugin
+
+The repository is also an `adsctl` plugin for Codex and Claude Code, bundling both skills. Register a local checkout or extracted plugin distribution and install it:
+
+```sh
+# Codex
+codex plugin marketplace add /absolute/path/to/adsctl
+codex plugin add adsctl@adsctl
+
+# Claude Code
+claude plugin marketplace add /absolute/path/to/adsctl
+claude plugin install adsctl@adsctl
+```
+
+Run the setup workflow in Codex or `/adsctl:adsctl-setup` in Claude Code, then use the operations skill (`/adsctl:adsctl` in Claude Code). The CLI must be available on the agent host's PATH and Meta credentials must be supplied separately. See [plugin installation and verification](docs/plugins.md) for GitHub installation, development, updates, and platform requirements.
+
 ## Build and verify
 
 Requires Go 1.25.1 or later. Persistent launch and monitor state currently uses macOS/Linux file locking. Other commands can compile for Windows; Windows persistent execution is explicitly rejected.
@@ -23,7 +39,7 @@ CI repeats these checks on pull requests and pushes. Tests use local HTTP fixtur
 
 ## Distributions and releases
 
-GitHub [releases](https://github.com/imrenagicom/adsctl/releases) contain binaries for Linux, macOS (`darwin`) and Windows, each for x86-64 (`amd64`) and ARM64 (`arm64`). Linux/macOS downloads are `.tar.gz`; Windows downloads are `.zip`. Every archive includes the agent skill and README, and `checksums.txt` records SHA-256 hashes. Windows persistent launch/monitor execution remains unsupported as described above.
+GitHub [releases](https://github.com/imrenagicom/adsctl/releases) contain binaries for Linux, macOS (`darwin`) and Windows, each for x86-64 (`amd64`) and ARM64 (`arm64`). Linux/macOS downloads are `.tar.gz`; Windows downloads are `.zip`. Distributions include both plugin manifests, marketplace catalogs, shared skills, and installation instructions alongside the binary. `checksums.txt` records SHA-256 hashes. Earlier releases may contain only the CLI and skills. Windows persistent launch/monitor execution remains unsupported as described above.
 
 GoReleaser v2.18.3 builds the distributions with CGO disabled and injects the version through `-X adsctl/internal/cli.version=...`. `adsctl version` reports that value in its normal JSON envelope. Local builds default to `dev`; override it with `make build VERSION=0.1.0` or `make install VERSION=0.1.0`.
 

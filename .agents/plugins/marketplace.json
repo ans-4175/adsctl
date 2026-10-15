@@ -1,0 +1,20 @@
+{
+  "name": "adsctl",
+  "interface": {
+    "displayName": "adsctl"
+  },
+  "plugins": [
+    {
+      "name": "adsctl",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

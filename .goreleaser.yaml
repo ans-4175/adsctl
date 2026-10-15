@@ -28,8 +28,13 @@ archives:
         formats: [zip]
     files:
       - README.md
+      - docs/plugins.md
       - skills/adsctl/**
       - skills/adsctl-setup/**
+      - .codex-plugin/plugin.json
+      - .claude-plugin/plugin.json
+      - .claude-plugin/marketplace.json
+      - .agents/plugins/marketplace.json
 
 checksum:
   name_template: checksums.txt
