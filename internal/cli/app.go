@@ -100,7 +100,7 @@ func (a *App) Root() *cobra.Command {
 		return nil
 	}
 	f := root.PersistentFlags()
-	f.StringVar(&a.opts.Config, "config", "", "Configuration file")
+	f.StringVar(&a.opts.Config, "config", "", "Configuration file (default: $ADSCTL_HOME/config.yaml or ~/.adsctl/config.yaml)")
 	f.StringVar(&a.opts.Profile, "profile", "", "Credential profile")
 	f.StringVar(&a.opts.Account, "account", "", "Ad account ID")
 	f.StringVar(&a.opts.APIVersion, "api-version", "", "Meta API version override")

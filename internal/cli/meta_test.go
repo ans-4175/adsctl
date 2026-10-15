@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -59,5 +60,31 @@ func TestDiscoveryDoesNotRequireCredentials(t *testing.T) {
 		if code := Run(context.Background(), args, new(bytes.Buffer), &out, &errOut); code != 0 {
 			t.Fatal(args, code, errOut.String())
 		}
+	}
+}
+
+func TestHomeConfigurationAndRelativeSecretAuthenticate(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("ADSCTL_HOME", home)
+	if err := os.Mkdir(filepath.Join(home, "secrets"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "secrets", "meta-token"), []byte("fixture-token\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	a := &App{In: new(bytes.Buffer), Out: new(bytes.Buffer), Err: new(bytes.Buffer)}
+	if err := executeTest(a, []string{"config", "profiles", "set", "read", "--token-file", "secrets/meta-token"}); err != nil {
+		t.Fatal(err)
+	}
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer fixture-token" {
+			t.Error("relative token was not used")
+		}
+		_, _ = fmt.Fprint(w, `{"id":"act_123","currency":"USD"}`)
+	}))
+	defer s.Close()
+	a = &App{In: new(bytes.Buffer), Out: new(bytes.Buffer), Err: new(bytes.Buffer), baseURL: s.URL}
+	if err := executeTest(a, []string{"meta", "auth", "check", "--profile", "read", "--account", "act_123"}); err != nil {
+		t.Fatal(err)
 	}
 }

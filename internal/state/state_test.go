@@ -2,6 +2,7 @@ package state
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -35,5 +36,18 @@ func TestPrivateStateAndLock(t *testing.T) {
 	var result map[string]string
 	if err = Read(path, &result); err != nil || result["state"] != "unknown" {
 		t.Fatal(err, result)
+	}
+}
+
+func TestStateUsesAdsctlHome(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ADSCTL_HOME", dir)
+	got, err := Dir("")
+	if err != nil || got != filepath.Join(dir, "state") {
+		t.Fatal(got, err)
+	}
+	got, err = Dir("legacy-state")
+	if err != nil || got != "legacy-state" {
+		t.Fatal("explicit state directory lost precedence", got, err)
 	}
 }

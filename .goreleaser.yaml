@@ -28,6 +28,7 @@ archives:
         formats: [zip]
     files:
       - README.md
+      - install.sh
       - docs/plugins.md
       - skills/adsctl/**
       - skills/adsctl-setup/**

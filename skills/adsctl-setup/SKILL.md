@@ -9,9 +9,28 @@ Set up the adsctl CLI with external credentials and demonstrate access to the in
 
 ## Establish the installation and intended access
 
-- Find `adsctl` on PATH and inspect `adsctl version`. In a source checkout, use `bin/adsctl` or `make build`; Go 1.25.1 or later is required by this checkout. Outside a checkout, obtain the matching OS/architecture archive from [adsctl releases](https://github.com/imrenagicom/adsctl/releases), verify its SHA-256 against `checksums.txt`, and install the binary in a user-selected PATH directory. Do not assume the skill directory is the repository. Windows persistent launch/monitor execution is unsupported.
+- Find `adsctl` on PATH and inspect `adsctl version` and `adsctl config path`. The default home is `~/.adsctl`, with `bin/adsctl`, `config.yaml`, optional `secrets/`, `state/`, and a generated `env` shell file. `ADSCTL_HOME` overrides that root. In a source checkout, `bin/adsctl` or `make build` is also usable (Go 1.25.1 or later). Do not assume the skill directory contains the repository.
 - Establish the intended business portfolio, ad account ID, read versus advertising-write needs, and whether this is personal testing, unattended automation, or access to another business's accounts. Ask only for missing scope or choices that change the credential route. App ID, business ID, Page ID, and ad account ID are different identifiers; keep IDs as strings.
 - Inspect `adsctl config path`, `adsctl config profiles list`, and relevant `--help`. These commands expose references rather than secret values. Reuse the intended profile when suitable; preserve unrelated profiles and defaults. All examples below require replacing illustrative account IDs and file paths.
+
+## Install the executable
+
+For macOS/Linux, use the published installer when the CLI is missing or needs an upgrade:
+
+```sh
+curl -fsSL https://github.com/imrenagicom/adsctl/releases/latest/download/install.sh | sh
+. "${ADSCTL_HOME:-$HOME/.adsctl}/env"
+adsctl version
+adsctl config path
+```
+
+The installer chooses the OS/architecture, verifies the release archive's SHA-256 checksum, checks executable and `ADSCTL_HOME` compatibility, and installs into the home's `bin/` directory. It creates a starter config only if absent and preserves secrets and state. It prints the exact commands to add its source line once to the user's shell startup file and reload it. The generated `env` file sets `ADSCTL_HOME` and PATH; it does not contain credentials. Use `--version vX.Y.Z` to select a compatible release, or an absolute `ADSCTL_HOME` for another root. Do not treat an installer failure as a completed installation.
+
+If the release does not include the installer yet, download the matching archive and `checksums.txt` from [adsctl releases](https://github.com/imrenagicom/adsctl/releases), verify the checksum, and install the executable in `~/.adsctl/bin` (or `$ADSCTL_HOME/bin`). Add that directory to PATH and verify `adsctl version` and `config path`; an older binary may still use legacy defaults. Windows uses the release ZIP and manual PATH setup; persistent launch/monitor execution is unsupported there.
+
+For agent tools that start a new shell for each command, source the generated env file in each invocation, supply the home/PATH through the runner, or use the installed binary's absolute path. Shell exports in one process do not alter another process. Do not claim persistent PATH setup from a temporary export.
+
+Existing legacy configuration/state is not automatically moved. Keep using it through explicit `--config`/`--state-dir`, or move it into the new home while no adsctl commands are running and adjust secret references. Preserve existing data and do not initialize an empty profile over a populated configuration.
 
 ## Obtain or repair credentials
 
@@ -32,15 +51,15 @@ adsctl config profiles set client-read --platform meta \
   --token-env META_CLIENT_READ_TOKEN --api-version v25.0 --mode read
 ```
 
-Alternatively, reference a private file containing just the raw token and an optional trailing newline:
+To keep credentials under the same home, have the credential owner store the raw token (plus optional trailing newline) in `~/.adsctl/secrets/meta-read-token` or the matching `ADSCTL_HOME` location, with file mode 0600. Reference it relative to `config.yaml`:
 
 ```sh
 adsctl config profiles set client-read --platform meta \
-  --token-file /absolute/private/path/meta-read-token \
+  --token-file secrets/meta-read-token \
   --api-version v25.0 --mode read
 ```
 
-Use exactly one of `--token-env` and `--token-file`. Store files outside the checkout with access restricted to the runner (for example, directory mode 0700 and file mode 0600 on Unix). Shell exports in a separate process do not configure an already-running agent or future scheduler; ensure the actual execution environment receives the secret.
+Use exactly one of `--token-env` and `--token-file`. Relative file references resolve from the selected config file's directory, including an explicit `--config` location. Absolute file references and external secret stores remain supported. Keep secret files outside the checkout and restrict access to the runner (directory mode 0700, file mode 0600 on Unix). Ensure the actual execution environment receives any referenced secret variables.
 
 Only when advertising writes are requested, configure a separate profile such as `client-write` with a suitable token reference and `--mode write`. Local mode is a guard, not a grant of Meta permission. Advertising writes additionally require explicit `--profile` and `--account` flags.
 

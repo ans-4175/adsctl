@@ -6,6 +6,34 @@ The repository includes an [adsctl agent skill](skills/adsctl/SKILL.md) with rep
 
 For installation and Meta API credentials, use the [adsctl-setup skill](skills/adsctl-setup/SKILL.md). It covers developer apps, user and system-user tokens, asset permissions, secret references, and bounded authentication checks. Both skills are included in release archives.
 
+## Install
+
+On macOS or Linux, install the latest stable release and load its PATH configuration:
+
+```sh
+curl -fsSL https://github.com/imrenagicom/adsctl/releases/latest/download/install.sh | sh
+source "$HOME/.adsctl/env"
+adsctl version
+adsctl config path
+```
+
+The installer selects the OS and architecture, verifies the archive against the release's SHA-256 checksums, checks that the binary runs and supports `ADSCTL_HOME`, and installs without sudo. It prints the commands to add the generated `env` file to your shell startup file and reload it. For POSIX `sh`, use `. "$HOME/.adsctl/env"` instead of `source`. It does not edit shell startup files automatically.
+
+Everything defaults to one private directory:
+
+```text
+~/.adsctl/
+├── bin/adsctl        # executable; add this directory to PATH
+├── config.yaml       # profiles, Meta API versions, and credential references
+├── secrets/          # optional raw-token files, restricted to your user
+├── state/            # launch journals and monitoring state
+└── env               # shell setup for ADSCTL_HOME and PATH; no credentials
+```
+
+Set an absolute `ADSCTL_HOME` to use another directory. The installer and CLI use that same root. Pass `--version vX.Y.Z` to the installer to select a release with `ADSCTL_HOME` support, or set `ADSCTL_VERSION`. Reinstalling replaces the executable and generated shell setup while preserving configuration, secrets, and state. Windows users can extract the matching release ZIP, put `adsctl.exe` in `%USERPROFILE%\.adsctl\bin`, and add that directory to PATH.
+
+The curl endpoint becomes available in the first release that publishes `install.sh`; older release archives remain available for manual installation.
+
 ## Codex and Claude Code plugin
 
 The repository is also an `adsctl` plugin for Codex and Claude Code, bundling both skills. Register a local checkout or extracted plugin distribution and install it:
@@ -52,7 +80,7 @@ semantic-release uses the existing `v0.1.0` tag as its baseline. After the Go ch
 | `feat!: change the output contract` or a `BREAKING CHANGE:` footer | Major |
 | `docs:`, `test:`, `chore:`, `ci:` | No release by themselves |
 
-Use a Conventional Commit title when squash-merging a pull request. semantic-release builds the proposed version before creating its tag, then publishes generated release notes, the six archives and checksums to GitHub. The release job performs publishing directly, because tags created with `GITHUB_TOKEN` do not trigger another Actions workflow. It uses the built-in token with `contents: write`; no npm publishing or npm token is needed. Repository rules must allow this workflow to create version tags. The CI workflow can also be run manually on `main` to release any unreleased commits.
+Use a Conventional Commit title when squash-merging a pull request. semantic-release builds the proposed version before creating its tag, then publishes generated release notes, the six archives, checksums, and `install.sh` to GitHub. The release job performs publishing directly, because tags created with `GITHUB_TOKEN` do not trigger another Actions workflow. It uses the built-in token with `contents: write`; no npm publishing or npm token is needed. Repository rules must allow this workflow to create version tags. The CI workflow can also be run manually on `main` to release any unreleased commits.
 
 For local checks, install GoReleaser v2.18.3 and Node.js 24.10 or later:
 
@@ -82,7 +110,30 @@ adsctl meta auth check --profile client-read --account act_123
 adsctl meta accounts list --profile client-read --all
 ```
 
-The config stores references, never token values. A token file contains only the raw token and an optional trailing newline. The default config path is `$XDG_CONFIG_HOME/adsctl/config.yaml`, or `~/.config/adsctl/config.yaml`; use `adsctl config path` or `--config` for the resolved path. Optional `--app-secret-env` enables app-secret proof.
+The config stores references, never token values. A token file contains only the raw token and an optional trailing newline. The default config path is `~/.adsctl/config.yaml`, or `$ADSCTL_HOME/config.yaml`; use `adsctl config path` to inspect it or `--config` to select another file. Relative token-file paths resolve from the selected configuration file's directory, independently of the working directory. Optional `--app-secret-env` enables app-secret proof.
+
+To keep a Meta credential under the same root, save its token privately in `~/.adsctl/secrets/meta-read-token` (file mode 0600), then configure its reference:
+
+```sh
+adsctl config profiles set client-read --platform meta \
+  --token-file secrets/meta-read-token --api-version v25.0 --mode read
+```
+
+An example `~/.adsctl/config.yaml` is:
+
+```yaml
+version: 1
+default_profile: client-read
+profiles:
+  client-read:
+    platform: meta
+    token_file: secrets/meta-read-token
+    api_version: v25.0
+    mode: read
+portfolios: {}
+```
+
+**Existing installations:** The new default does not automatically move data from the old `$XDG_CONFIG_HOME/adsctl` or `~/.config/adsctl` configuration directory, or from the old OS user-config state directory (on macOS, `~/Library/Application Support/adsctl/state`). Use `--config` and `--state-dir` to keep using those locations, or move configuration, referenced secret files, and state into the new layout while no adsctl commands are running. Update token-file references as needed. The installer never overwrites an existing `config.yaml`.
 
 Read scope precedence is flags, `ADSCTL_PROFILE`/`ADSCTL_ACCOUNT`, then the configured default profile. Advertising writes require explicit `--profile`, explicit `--account` and a `mode: write` profile. Local mode is an additional guard; Meta enforces actual permissions. Authentication checks confirm the requested account read, not every permission needed by future writes.
 
@@ -192,7 +243,7 @@ adsctl meta launch reconcile RUN_ID --step campaigns.main --retry-unknown \
 
 Reconciliation checks account membership and planned fields; image attachment checks the hash exists in the selected account. Resume does not recreate known IDs. Video processing can interrupt a run with its known video ID; wait, then resume. Activation touches only recorded run objects, children before parents. Existing active parents can allow delivery as soon as a child is activated. Repeating `launch activate` checks configured status before continuing; activation success does not prove delivery. Failed runs are never automatically deleted.
 
-Local state defaults to the OS user config directory under `adsctl/state`; set `--state-dir` consistently for runners. State files are private and writes are atomic. Locks coordinate processes on one host, not distributed runners.
+Local state defaults to `~/.adsctl/state`, or `$ADSCTL_HOME/state`; set `--state-dir` consistently for runners that need another location. State files are private and writes are atomic. Locks coordinate processes on one host, not distributed runners.
 
 ## Agent contract and current limits
 

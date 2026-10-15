@@ -19,11 +19,11 @@ func Dir(explicit string) (string, error) {
 	if explicit != "" {
 		return explicit, nil
 	}
-	base, err := os.UserConfigDir()
+	base, err := config.Home()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(base, "adsctl", "state"), nil
+	return filepath.Join(base, "state"), nil
 }
 func Path(dir, key string) (string, error) {
 	if !safe.MatchString(key) {

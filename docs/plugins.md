@@ -2,7 +2,14 @@
 
 The `adsctl` plugin bundles two shared skills: `adsctl-setup` for CLI installation and Meta credentials, and `adsctl` for reporting, monitoring, and authorized management. The repository root is the plugin root. Host-specific manifests point to the same `skills/` tree; no MCP server or connector is required.
 
-Use a local host with shell execution. Install the adsctl executable on that host's PATH and supply credentials through its secret store; installing the skills does not install an executable or grant Meta permissions. Windows supports ordinary commands, but persistent launch/monitor execution requires macOS/Linux.
+Use a local host with shell execution. The setup skill installs the CLI through the release installer and guides credential provisioning. On macOS/Linux:
+
+```sh
+curl -fsSL https://github.com/imrenagicom/adsctl/releases/latest/download/install.sh | sh
+source "$HOME/.adsctl/env"
+```
+
+The default home holds `bin/adsctl`, `config.yaml`, optional secret files, and state. `ADSCTL_HOME` overrides that root. The generated `env` file configures PATH and contains no credentials. Installing plugin skills alone does not grant Meta permissions. Windows supports ordinary commands, but persistent launch/monitor execution requires macOS/Linux; Windows binary installation uses the release ZIP and manual PATH setup.
 
 ## Codex
 
@@ -41,6 +48,7 @@ Run maintainer checks from a source checkout:
 
 ```sh
 make plugin-check
+make installer-check
 claude plugin validate .claude-plugin/plugin.json --strict
 claude plugin validate .claude-plugin/marketplace.json --strict
 claude plugin validate skills --strict
@@ -51,6 +59,6 @@ make release-snapshot
 
 Native inventory checks were performed with Codex CLI 0.162.1 and Claude Code 2.1.293. Both discovered `adsctl` and `adsctl-setup`; Claude's local marketplace installation was exercised with temporary settings. These checks do not call Meta or establish credential access.
 
-The plugin has an independent version (`0.1.0` initially) in both host manifests. Bump both together when changing the plugin skills, manifests, or bundled resources so cached Git installs can receive the update. CLI versions continue to come from release tags. Refresh the registered marketplace and update/reinstall the plugin after publishing a plugin version change. Earlier CLI releases without these manifests are standalone CLI/skill distributions.
+The plugin has an independent version in both host manifests. Bump both together when changing the plugin skills, manifests, or bundled resources so cached Git installs can receive the update. CLI versions continue to come from release tags. Refresh the registered marketplace and update/reinstall the plugin after publishing a plugin version change. Earlier CLI releases without these manifests are standalone CLI/skill distributions.
 
 The layouts follow the official [Codex plugin packaging](https://developers.openai.com/plugins/build/plugins), [desktop-only plugin](https://developers.openai.com/plugins/deploy/desktop-only), [Claude plugin manifest](https://code.claude.com/docs/en/plugins-reference), and [Claude marketplace](https://code.claude.com/docs/en/plugin-marketplaces) documentation.

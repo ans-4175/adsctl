@@ -18,7 +18,7 @@ module.exports = {
     [
       "@semantic-release/github",
       {
-        assets: ["dist/*.tar.gz", "dist/*.zip", "dist/checksums.txt"],
+        assets: ["dist/*.tar.gz", "dist/*.zip", "dist/checksums.txt", "install.sh"],
         successCommentCondition: false,
         failCommentCondition: false,
         releasedLabels: false,

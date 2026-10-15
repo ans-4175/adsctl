@@ -22,6 +22,7 @@ type Profile struct {
 	AppSecretEnv string `yaml:"app_secret_env,omitempty" json:"app_secret_env,omitempty"`
 	APIVersion   string `yaml:"api_version" json:"api_version"`
 	Mode         string `yaml:"mode" json:"mode"`
+	configDir    string
 }
 type Member struct {
 	Profile string `yaml:"profile" json:"profile"`
@@ -52,19 +53,27 @@ func ID(id string) error {
 	return nil
 }
 func ValidVersion(v string) bool { return versionRE.MatchString(v) }
+
+// Home resolves the shared directory for configuration, secrets and local state.
+func Home() (string, error) {
+	if dir := os.Getenv("ADSCTL_HOME"); dir != "" {
+		return filepath.Abs(dir)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".adsctl"), nil
+}
 func Path(explicit string) (string, error) {
 	if explicit != "" {
 		return explicit, nil
 	}
-	base := os.Getenv("XDG_CONFIG_HOME")
-	if base == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		base = filepath.Join(home, ".config")
+	base, err := Home()
+	if err != nil {
+		return "", err
 	}
-	return filepath.Join(base, "adsctl", "config.yaml"), nil
+	return filepath.Join(base, "config.yaml"), nil
 }
 func Load(path string) (Config, error) {
 	cfg := Config{Version: 1, Profiles: map[string]Profile{}, Portfolios: map[string][]Member{}}
@@ -90,7 +99,18 @@ func Load(path string) (Config, error) {
 	if cfg.Profiles == nil {
 		cfg.Profiles = map[string]Profile{}
 	}
-	return cfg, cfg.Validate()
+	if err = cfg.Validate(); err != nil {
+		return cfg, err
+	}
+	dir, err := filepath.Abs(filepath.Dir(path))
+	if err != nil {
+		return cfg, err
+	}
+	for name, profile := range cfg.Profiles {
+		profile.configDir = dir
+		cfg.Profiles[name] = profile
+	}
+	return cfg, nil
 }
 func (c Config) Validate() error {
 	if c.Version != 1 {
@@ -163,7 +183,11 @@ func (p Profile) Token() (string, error) {
 			return "", output.Fail("CONFIG", "Missing token environment variable: "+p.TokenEnv, 2)
 		}
 	} else {
-		b, err := os.ReadFile(p.TokenFile)
+		path := p.TokenFile
+		if !filepath.IsAbs(path) && p.configDir != "" {
+			path = filepath.Join(p.configDir, path)
+		}
+		b, err := os.ReadFile(path)
 		if err != nil {
 			return "", output.Fail("CONFIG", "Cannot read token file for selected profile.", 2)
 		}

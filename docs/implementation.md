@@ -5,6 +5,7 @@ The initial executable covers all Meta command groups in the original design. Th
 | Area | Implemented | Limits |
 | --- | --- | --- |
 | Credentials | External environment/file references, read/write profiles, app-secret proof | No OAuth, token refresh or permission introspection; auth check is an account read |
+| Installation and CLI home | Checksummed macOS/Linux release installer; `~/.adsctl` or `ADSCTL_HOME` for config and state; config-relative secret files | Windows uses ZIP/manual PATH setup; legacy locations remain selectable with explicit flags |
 | Discovery | Resources, business owned/client accounts, targeting | No combined business relationship query; Page listing follows credential identity access |
 | Native Insights | Sync query, attribution, breakdowns, filters, pagination | Provider validates combinations and availability |
 | Async Insights | Create/get/wait/results; account membership checked | Explicit jobs; higher-level reports currently use synchronous requests |

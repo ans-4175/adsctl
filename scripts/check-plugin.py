@@ -66,7 +66,7 @@ def check_archive(path):
     roots = [name[:-len(MANIFESTS[0])] for name in files if name.endswith(MANIFESTS[0])]
     require(len(roots) == 1, f"Expected one plugin root in {path.name}")
     prefix = roots[0]
-    required = [*MANIFESTS, *CATALOGS, "README.md", "docs/plugins.md"]
+    required = [*MANIFESTS, *CATALOGS, "README.md", "docs/plugins.md", "install.sh"]
     required.extend(p.relative_to(ROOT).as_posix()
                     for p in (ROOT / "skills").rglob("*") if p.is_file())
     for relative in required:

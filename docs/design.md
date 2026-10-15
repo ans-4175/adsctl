@@ -91,7 +91,7 @@ Reporting requires `ads_read`; management requires `ads_management`. Business di
 
 `auth check` inspects available token information and performs a small account read. Return separate results for token validity, scopes when inspectable, account access and local CLI mode. Token debugging may need app credentials; unavailable information is `unknown`. A successful read does not prove permission to create every resource or use every supporting asset.
 
-Store non-secret configuration at `$XDG_CONFIG_HOME/adsctl/config.yaml`, falling back to `~/.config/adsctl/config.yaml`:
+Store non-secret configuration at `~/.adsctl/config.yaml`, or `$ADSCTL_HOME/config.yaml` when overridden. The same home contains `bin/`, optional `secrets/`, and `state/`. Explicit `--config` and `--state-dir` still select other locations, including legacy installations. Relative token-file references resolve from the selected config file's directory:
 
 ```yaml
 version: 1
