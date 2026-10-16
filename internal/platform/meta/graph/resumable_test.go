@@ -291,60 +291,83 @@ func TestVideoUploadAmbiguousTransferRecoveryIsBounded(t *testing.T) {
 	}
 }
 
+// The large-file case verifies streamed multipart parsing without making shared
+// CI loopback throughput part of the assertion. A smaller case exercises the
+// same multi-request flow over real HTTP, including connection reuse.
 func TestVideoUploadLargeFileStreamsServerRanges(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	const size int64 = 106906451
-	var received int64
-	c, file, opt := videoFixture(t, func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/") {
-			if r.ContentLength <= 0 || len(r.TransferEncoding) != 0 {
-				t.Error("upload range must have explicit HTTP framing")
-			}
-			reader, err := r.MultipartReader()
-			if err != nil {
-				t.Error(err)
-				return
-			}
-			var chunk int64
-			for {
-				part, e := reader.NextPart()
-				if errors.Is(e, io.EOF) {
-					break
-				}
-				if e != nil {
-					t.Error(e)
+	for _, fixture := range []struct {
+		name            string
+		size, chunkSize int64
+		inProcess       bool
+	}{{"large_stream", 106906451, 4 << 20, true}, {"http_transport", 4 << 20, 1 << 20, false}} {
+		t.Run(fixture.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			var received int64
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/") {
+					if r.ContentLength <= 0 || r.ContentLength > fixture.chunkSize+4096 || len(r.TransferEncoding) != 0 {
+						t.Error("upload range must have bounded explicit HTTP framing")
+					}
+					reader, err := r.MultipartReader()
+					if err != nil {
+						t.Error(err)
+						return
+					}
+					var chunk int64
+					for {
+						part, e := reader.NextPart()
+						if errors.Is(e, io.EOF) {
+							break
+						}
+						if e != nil {
+							t.Error(e)
+							return
+						}
+						if part.FormName() == "video_file_chunk" {
+							chunk, e = io.Copy(io.Discard, part)
+							if e != nil {
+								t.Error(e)
+							}
+						}
+					}
+					if chunk != min(fixture.chunkSize, fixture.size-received) {
+						t.Error("wrong range size", chunk, received)
+					}
+					received += chunk
+					_, _ = fmt.Fprintf(w, `{"start_offset":"%d","end_offset":"%d"}`, received, min(received+fixture.chunkSize, fixture.size))
 					return
 				}
-				if part.FormName() == "video_file_chunk" {
-					chunk, e = io.Copy(io.Discard, part)
-					if e != nil {
-						t.Error(e)
-					}
+				_ = r.ParseForm()
+				if r.Form.Get("upload_phase") == "start" {
+					_, _ = fmt.Fprintf(w, `{"upload_session_id":"123","video_id":"789","start_offset":"0","end_offset":"%d"}`, fixture.chunkSize)
+				} else {
+					_, _ = fmt.Fprint(w, `{"success":true}`)
 				}
+			})
+			c, file, opt := videoFixture(t, handler)
+			if fixture.inProcess {
+				c.HTTP = &http.Client{Transport: fixtureTransport(func(r *http.Request) (*http.Response, error) {
+					defer func() { _ = r.Body.Close() }()
+					recorder := httptest.NewRecorder()
+					handler.ServeHTTP(recorder, r)
+					return recorder.Result(), nil
+				})}
 			}
-			if chunk != min(4<<20, size-received) {
-				t.Error("wrong range size", chunk, received)
+			if err := os.Truncate(file, fixture.size); err != nil {
+				t.Fatal(err)
 			}
-			received += chunk
-			_, _ = fmt.Fprintf(w, `{"start_offset":"%d","end_offset":"%d"}`, received, min(received+4<<20, size))
-			return
-		}
-		_ = r.ParseForm()
-		if r.Form.Get("upload_phase") == "start" {
-			_, _ = fmt.Fprint(w, `{"upload_session_id":"123","video_id":"789","start_offset":"0","end_offset":"4194304"}`)
-		} else {
-			_, _ = fmt.Fprint(w, `{"success":true}`)
-		}
-	})
-	if err := os.Truncate(file, size); err != nil {
-		t.Fatal(err)
-	}
-	response, err := c.UploadVideo(ctx, "act_456", file, opt)
-	if err != nil || received != size || response.Value["id"] != "789" {
-		t.Fatal(err, received, response)
+			response, err := c.UploadVideo(ctx, "act_456", file, opt)
+			if err != nil || received != fixture.size || response.Value["id"] != "789" {
+				t.Fatal(err, received, response)
+			}
+		})
 	}
 }
+
+type fixtureTransport func(*http.Request) (*http.Response, error)
+
+func (f fixtureTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
 func TestVideoUploadRequestDeadlineAndCancellation(t *testing.T) {
 	var calls atomic.Int32
