@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"net/url"
 	"os"
@@ -305,6 +306,19 @@ func (a *App) executeRun(r *runtime, dir string, run *launch.Run) error {
 	}
 	// Scan all checkpoints before creating anything on a resume.
 	for key, cp := range run.Steps {
+		step, exists := run.Plan.Step(key)
+		if exists && step.Resource == "videos" {
+			checkpoint, _ := state.Path(dir, videoStepID(run.ID, key))
+			if _, e := os.Stat(checkpoint); e == nil {
+				var video graph.VideoCheckpoint
+				if err := state.Read(checkpoint, &video); err != nil {
+					return err
+				}
+				if video.Phase != "starting" {
+					continue
+				}
+			}
+		}
 		if cp.State == "in_flight" || cp.State == "unknown" {
 			cp.State = "unknown"
 			run.Steps[key] = cp
@@ -355,8 +369,15 @@ func (a *App) executeRun(r *runtime, dir string, run *launch.Run) error {
 			return err
 		}
 		if s.Resource == "images" || s.Resource == "videos" {
-			response, e := r.Client.Upload(r.Ctx, r.Account, s.Resource, s.File)
-			err = e
+			var response graph.Response
+			if s.Resource == "videos" {
+				id := videoStepID(run.ID, s.Key)
+				checkpoint, _ := state.Path(dir, id)
+				_, statErr := os.Stat(checkpoint)
+				response, err = r.Client.UploadVideo(r.Ctx, r.Account, s.File, graph.VideoUploadOptions{Profile: r.Profile, StateDir: dir, ID: id, Resume: !os.IsNotExist(statErr)})
+			} else {
+				response, err = r.Client.Upload(r.Ctx, r.Account, s.Resource, s.File)
+			}
 			cp.Receipt = response.Value
 			if err == nil {
 				if s.Resource == "videos" {
@@ -483,11 +504,31 @@ func reconcileRun(r *runtime, dir string, run *launch.Run, key, id string, retry
 	if (id == "") == !retry {
 		return output.Fail("USAGE", "Choose --remote-id or --retry-unknown.", 2)
 	}
+	var videoRetry *graph.VideoCheckpoint
+	uploadKey := videoStepID(run.ID, key)
+	if retry && s.Resource == "videos" {
+		path, _ := state.Path(dir, uploadKey)
+		if _, err := os.Stat(path); err == nil {
+			var video graph.VideoCheckpoint
+			if err = state.Read(path, &video); err != nil {
+				return err
+			}
+			if video.Phase != "starting" {
+				return output.Fail("USAGE", "This video has a checkpointed session; use launch resume to recover it instead of creating another asset.", 2)
+			}
+			videoRetry = &video
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+	}
 	if retry {
 		cp.State = "pending"
 		cp.ID = ""
 		cp.Error = nil
 		cp.Receipt = map[string]any{"operator_decision": "retry_unknown", "duplicate_risk": true}
+		if videoRetry != nil {
+			cp.Receipt["previous_upload"] = *videoRetry
+		}
 	}
 	if id != "" {
 		if err := verifyStep(r, s, id, run.IDs()); err != nil {
@@ -501,7 +542,16 @@ func reconcileRun(r *runtime, dir string, run *launch.Run, key, id string, retry
 	run.Decisions = append(run.Decisions, map[string]any{"step": key, "remote_id": id, "retry_unknown": retry, "duplicate_risk": retry})
 	run.Steps[key] = cp
 	run.State = "reconciled"
-	return saveRun(dir, run)
+	// Persist the explicit duplicate-risk decision before permitting a new start.
+	if err := saveRun(dir, run); err != nil {
+		return err
+	}
+	if videoRetry != nil {
+		videoRetry.Phase, videoRetry.SessionID, videoRetry.VideoID = "new", "", ""
+		videoRetry.Start, videoRetry.End = 0, 0
+		return state.Save(dir, uploadKey, videoRetry)
+	}
+	return nil
 }
 func activateRun(r *runtime, dir string, run *launch.Run, dry bool) error {
 	if !run.Ready() {
@@ -588,4 +638,9 @@ func activateRun(r *runtime, dir string, run *launch.Run, dry bool) error {
 	}
 	run.State = "active"
 	return saveRun(dir, run)
+}
+
+// Stable per-run IDs preserve a video's upload session across process crashes.
+func videoStepID(runID, key string) string {
+	return fmt.Sprintf("upload_%x", sha256.Sum256([]byte(runID+"|"+key)))
 }

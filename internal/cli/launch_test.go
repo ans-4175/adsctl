@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 
 	"adsctl/internal/launch"
 	"adsctl/internal/output"
+	"adsctl/internal/platform/meta/graph"
 	"adsctl/internal/state"
 )
 
@@ -212,5 +214,162 @@ func TestUnknownLaunchRequiresExplicitReconciliation(t *testing.T) {
 	out.Reset()
 	if err := executeTest(a, []string{"meta", "launch", "status", id, "--state-dir", dir}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestLaunchResumesVideoSessionAfterUnknownTransfer(t *testing.T) {
+	starts, transfers, finishes := 0, 0, 0
+	blocked := true
+	a, out, _, cfg := testApp(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v25.0/act_123":
+			_, _ = fmt.Fprint(w, `{"id":"act_123","currency":"USD"}`)
+			return
+		case "/v25.0/act_123/advideos":
+			if r.Method == "GET" {
+				_, _ = fmt.Fprint(w, `{"data":[{"id":"789"}]}`)
+				return
+			}
+			if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/") {
+				if err := r.ParseMultipartForm(1024); err != nil {
+					t.Error(err)
+				}
+				defer func() {
+					if r.MultipartForm != nil {
+						_ = r.MultipartForm.RemoveAll()
+					}
+				}()
+				transfers++
+				if r.FormValue("upload_session_id") != "123" {
+					t.Error("changed session")
+				}
+				if blocked {
+					w.WriteHeader(503)
+					return
+				}
+				_, _ = fmt.Fprint(w, `{"start_offset":"10","end_offset":"10"}`)
+				return
+			}
+			_ = r.ParseForm()
+			if r.Form.Get("upload_phase") == "start" {
+				starts++
+				_, _ = fmt.Fprint(w, `{"upload_session_id":"123","video_id":"789","start_offset":"0","end_offset":"10"}`)
+			} else {
+				finishes++
+				_, _ = fmt.Fprint(w, `{"success":true}`)
+			}
+			return
+		case "/v25.0/789":
+			_, _ = fmt.Fprint(w, `{"id":"789","status":{"video_status":"ready"}}`)
+			return
+		default:
+			t.Error("unexpected request", r.URL.Path)
+		}
+	})
+	dir := t.TempDir()
+	file := filepath.Join(dir, "video.mp4")
+	if err := os.WriteFile(file, []byte("0123456789"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	hash, err := launch.HashFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := a.runtimeForVideoTest(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Cancel()
+	plan := launch.Plan{Steps: []launch.Step{{Key: "assets.demo", Resource: "videos", File: file, Hash: hash}}}
+	run, err := launch.NewRun(plan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = a.executeRun(r, dir, &run); err == nil || output.AsError(err).Exit != 10 || starts != 1 || transfers != 4 {
+		t.Fatal(err, starts, transfers, out.String())
+	}
+	cp := run.Steps["assets.demo"]
+	if cp.Receipt["id"] != "789" {
+		t.Fatal("lost video ID", cp)
+	}
+	blocked = false
+	// Read from disk to simulate another process resuming after interruption.
+	path, _ := state.Path(dir, run.ID)
+	if err = state.Read(path, &run); err != nil {
+		t.Fatal(err)
+	}
+	if err = a.executeRun(r, dir, &run); err != nil {
+		t.Fatal(err)
+	}
+	if starts != 1 || finishes != 1 || transfers != 5 || run.Steps["assets.demo"].ID != "789" || !run.Ready() {
+		t.Fatal(starts, finishes, transfers, run)
+	}
+}
+
+func (a *App) runtimeForVideoTest(cfg string) (*runtime, error) {
+	root := a.Root()
+	root.SetContext(context.Background())
+	cmd, _, err := root.Find([]string{"meta", "videos", "upload"})
+	if err != nil {
+		return nil, err
+	}
+	if err = cmd.ParseFlags([]string{"--config", cfg, "--profile", "test", "--account", "123"}); err != nil {
+		return nil, err
+	}
+	cmd.SetContext(context.Background())
+	return a.runtime(cmd, true, true)
+}
+
+func TestLaunchUnknownVideoStartBlocksOtherCreates(t *testing.T) {
+	a, _, _, cfg := testApp(t, func(w http.ResponseWriter, r *http.Request) { t.Error("unknown start allowed a remote operation") })
+	r, err := a.runtimeForVideoTest(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Cancel()
+	dir := t.TempDir()
+	run, err := launch.NewRun(launch.Plan{Steps: []launch.Step{{Key: "assets.first", Resource: "images"}, {Key: "assets.video", Resource: "videos"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	run.Steps["assets.video"] = launch.Checkpoint{State: "unknown"}
+	if err = state.Save(dir, videoStepID(run.ID, "assets.video"), graph.VideoCheckpoint{Phase: "starting"}); err != nil {
+		t.Fatal(err)
+	}
+	if err = a.executeRun(r, dir, &run); err == nil || output.AsError(err).Exit != 10 {
+		t.Fatal(err)
+	}
+}
+
+func TestLaunchVideoRetryRequiresExplicitUnknownStartDecision(t *testing.T) {
+	dir := t.TempDir()
+	run, err := launch.NewRun(launch.Plan{Steps: []launch.Step{{Key: "assets.video", Resource: "videos"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := videoStepID(run.ID, "assets.video")
+	for _, phase := range []string{"transfer", "starting"} {
+		run.Steps["assets.video"] = launch.Checkpoint{State: "unknown"}
+		if err = state.Save(dir, key, graph.VideoCheckpoint{Phase: phase}); err != nil {
+			t.Fatal(err)
+		}
+		err = reconcileRun(nil, dir, &run, "assets.video", "", true)
+		if phase == "transfer" {
+			if err == nil {
+				t.Fatal("known session allowed a duplicate-risk restart")
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		path, _ := state.Path(dir, key)
+		var cp graph.VideoCheckpoint
+		if err = state.Read(path, &cp); err != nil {
+			t.Fatal(err)
+		}
+		if cp.Phase != "new" || run.Steps["assets.video"].State != "pending" || len(run.Decisions) != 1 || run.Steps["assets.video"].Receipt["previous_upload"] == nil {
+			t.Fatal(cp, run)
+		}
 	}
 }
