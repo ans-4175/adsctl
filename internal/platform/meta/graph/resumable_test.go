@@ -292,10 +292,15 @@ func TestVideoUploadAmbiguousTransferRecoveryIsBounded(t *testing.T) {
 }
 
 func TestVideoUploadLargeFileStreamsServerRanges(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
 	const size int64 = 106906451
 	var received int64
 	c, file, opt := videoFixture(t, func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/") {
+			if r.ContentLength <= 0 || len(r.TransferEncoding) != 0 {
+				t.Error("upload range must have explicit HTTP framing")
+			}
 			reader, err := r.MultipartReader()
 			if err != nil {
 				t.Error(err)
@@ -335,7 +340,7 @@ func TestVideoUploadLargeFileStreamsServerRanges(t *testing.T) {
 	if err := os.Truncate(file, size); err != nil {
 		t.Fatal(err)
 	}
-	response, err := c.UploadVideo(context.Background(), "act_456", file, opt)
+	response, err := c.UploadVideo(ctx, "act_456", file, opt)
 	if err != nil || received != size || response.Value["id"] != "789" {
 		t.Fatal(err, received, response)
 	}

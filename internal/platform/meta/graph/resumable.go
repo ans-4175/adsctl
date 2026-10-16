@@ -190,7 +190,7 @@ func (c *Client) UploadVideo(ctx context.Context, account, path string, opt Vide
 			return result, output.Fail("TIMEOUT", "Upload interrupted; resume the same upload ID.", 7)
 		}
 		before := cp.Start
-		response, e := video.uploadMultipart(ctx, account, "videos", "video_file_chunk", path, io.NewSectionReader(f, cp.Start, cp.End-cp.Start), url.Values{"upload_phase": {"transfer"}, "upload_session_id": {cp.SessionID}, "start_offset": {strconv.FormatInt(cp.Start, 10)}})
+		response, e := video.uploadMultipart(ctx, account, "videos", "video_file_chunk", path, io.NewSectionReader(f, cp.Start, cp.End-cp.Start), cp.End-cp.Start, url.Values{"upload_phase": {"transfer"}, "upload_session_id": {cp.SessionID}, "start_offset": {strconv.FormatInt(cp.Start, 10)}})
 		if e != nil {
 			oe := output.AsError(e)
 			provider, _ := oe.Provider.(map[string]any)
