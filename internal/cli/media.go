@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"net/url"
 	"os"
@@ -9,27 +11,65 @@ import (
 	"adsctl/internal/config"
 	"adsctl/internal/output"
 	"adsctl/internal/platform/meta/graph"
+	"adsctl/internal/state"
 	"github.com/spf13/cobra"
 )
 
 func (a *App) addMedia(g *cobra.Command, resource string) {
-	var file string
+	var file, mode, resume, dir string
 	var dry bool
-	cmd := action("upload", "Upload media once to the selected account", "write", func(c *cobra.Command, _ []string) error {
+	cmd := action("upload", "Upload media to the selected account", "write", func(c *cobra.Command, _ []string) error {
 		r, err := a.runtime(c, true, true)
 		if err != nil {
 			return err
 		}
 		defer r.Cancel()
 		info, err := os.Stat(file)
-		if err != nil || !info.Mode().IsRegular() || info.Size() == 0 {
-			return output.Fail("INPUT", "Specify a nonempty media --file.", 2)
+		if err != nil || !info.Mode().IsRegular() || info.Size() == 0 || info.Size() > graph.MaxUploadSize {
+			return output.Fail("INPUT", "Specify a nonempty regular media --file at most 1 GiB.", 2)
 		}
 		receipt := map[string]any{"resource": resource, "file": file, "size": info.Size(), "dry_run": dry, "state": "planned"}
+		selected := "single"
+		if resource == "videos" {
+			if mode != "auto" && mode != "single" && mode != "resumable" {
+				return output.Fail("USAGE", "Video mode must be auto, single or resumable.", 2)
+			}
+			selected = mode
+			if selected == "auto" {
+				selected = "resumable"
+			}
+			if resume != "" && selected != "resumable" {
+				return output.Fail("USAGE", "--resume requires resumable mode.", 2)
+			}
+		}
+		receipt["mode"], receipt["max_file_size"] = selected, graph.MaxUploadSize
+		receipt["limit_note"] = "1 GiB is a local file bound; provider limits still apply. Resumable chunks follow server offsets."
 		if dry {
 			return a.emit(c, receipt)
 		}
-		response, err := r.Client.Upload(r.Ctx, r.Account, resource, file)
+		var response graph.Response
+		if selected == "resumable" {
+			root, e := state.Dir(dir)
+			if e != nil {
+				return e
+			}
+			id := resume
+			if id == "" {
+				b := make([]byte, 12)
+				if _, e = rand.Read(b); e != nil {
+					return e
+				}
+				id = "upload_" + hex.EncodeToString(b)
+			}
+			receipt["upload_id"] = id
+			response, err = r.Client.UploadVideo(r.Ctx, r.Account, file, graph.VideoUploadOptions{Profile: r.Profile, StateDir: root, ID: id, Resume: resume != ""})
+		} else {
+			response, err = r.Client.Upload(r.Ctx, r.Account, resource, file)
+		}
+		if response.Value != nil {
+			receipt["response"] = response.Value
+		}
+
 		if err != nil {
 			receipt["state"] = "failed"
 			if output.AsError(err).Exit == 10 {
@@ -55,6 +95,9 @@ func (a *App) addMedia(g *cobra.Command, resource string) {
 	cmd.Flags().BoolVar(&dry, "dry-run", false, "Inspect file without uploading")
 	g.AddCommand(cmd)
 	if resource == "videos" {
+		cmd.Flags().StringVar(&mode, "mode", "auto", "Upload mode: auto (resumable for every video), resumable, single")
+		cmd.Flags().StringVar(&resume, "resume", "", "Resume an existing upload ID with the same file and scope")
+		cmd.Flags().StringVar(&dir, "state-dir", "", "Private upload checkpoint directory")
 		cmd := action("wait ID", "Wait for an account video to finish processing", "read", func(c *cobra.Command, args []string) error {
 			r, err := a.runtime(c, true, false)
 			if err != nil {

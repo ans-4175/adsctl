@@ -346,6 +346,23 @@ adsctl meta ads create --profile agency-write --account act_123 \
   --name 'Banner A' --adset 789 --creative 202
 ```
 
+Video uploads accept `--mode auto|resumable|single`. The default `auto` chooses resumable for **every video**, independent of file size. This is a client policy, not a claim about a universal Meta request-size limit. Images and explicit `--mode single` use one multipart request. Both paths enforce a local nonempty regular-file bound of 1 GiB; provider limits still apply. `--dry-run` reports the selected mode and local bound without contacting Meta or creating upload state.
+
+Resumable uploads use Meta's video host and start/transfer/finish protocol. Transfers stream exactly the server's requested byte ranges, with bounded retries only within the existing session. The receipt includes `upload_id`, `response.id` (the video ID once known), the phase and confirmed offsets. `--state-dir` overrides the private checkpoint directory, otherwise `$ADSCTL_HOME/state` or `~/.adsctl/state` is used. Checkpoints contain the file SHA-256/size, session/video IDs, offsets, profile/account/API/endpoint scope, and no credentials. Keep them until processing is confirmed.
+
+```sh
+adsctl meta videos upload --profile agency-write --account act_123 \
+  --file ./demo.mp4 --mode resumable --request-timeout 5m --timeout 30m
+# Use the upload_id from that receipt after an interruption:
+adsctl meta videos upload --profile agency-write --account act_123 \
+  --file ./demo.mp4 --resume upload_<id> --request-timeout 5m --timeout 30m
+adsctl meta videos wait <video-id> --profile agency-write --account act_123 --timeout 10m
+```
+
+Resume rejects a changed file or scope, even if the checkpoint is already complete. A completed upload returns the same video ID without creating an asset. Cancellation and deadlines preserve checkpoints; `--request-timeout` bounds each request and `--timeout` bounds the full operation, including hashing and recovery. An ambiguous start remains blocked because no acknowledged session identity is available; inspect account inventory before deciding whether another upload is appropriate. An ambiguous finish is reconciled by reading the saved video ID's status and is never blindly repeated. If status is not yet conclusive, resume the same ID later. The command uploads an advertising asset; it does not activate ads or publish an organic post.
+
+HTTP failures expose `error.http_status`. HTTP 413 means the request body was rejected as too large and recommends a smaller copy or resumable video mode; arbitrary non-JSON response bodies are not emitted. Uncertain mutation outcomes exit 10 and keep their receipts for reconciliation. Launch apply/resume uses resumable uploads with one stable checkpoint per video step, preserving the video ID and avoiding duplicate assets across interrupted runs.
+
 `--special-ad-categories NONE` maps to an empty declaration array, subject to the applicable category requirements; other values map to the specified categories. Defaults for campaign/ad-set/ad creation explicitly supply `PAUSED`. Scalars are convenience flags; resource `--file` provides the native payload instead. Status never changes from a validation command.
 
 Example `adset.json` for a traffic template:
@@ -458,7 +475,7 @@ adsctl meta launch reconcile run_001 --step campaigns.traffic --remote-id 456 \
   --profile agency-write --account act_123
 ```
 
-This verifies the remote object's account/type and expected fields before attaching it to the journal. An explicit `--retry-unknown` alternative on `reconcile` records the operator's decision to retry that step and discloses duplicate risk; it never happens automatically. `resume` cannot bypass unknown steps. Journal inspection is local and needs no token. Resumes require unchanged plan identity, checked files, correct credential scope and exclusive local ownership.
+This verifies the remote object's account/type and expected fields before attaching it to the journal. An explicit `--retry-unknown` alternative on `reconcile` records the operator's decision to retry that step and discloses duplicate risk; it never happens automatically. `resume` cannot bypass unknown creates, except for a resumable video session that can safely continue or reconcile its saved finish. For a known video session, use `resume`; `--retry-unknown` refuses to replace that session. For an unacknowledged video start, an explicit `--retry-unknown` decision records the prior checkpoint before permitting a new start with duplicate risk. Journal inspection is local and needs no token. Resumes require unchanged plan identity, checked files, correct credential scope and exclusive local ownership.
 
 ## 12. Output, pagination and error UX
 

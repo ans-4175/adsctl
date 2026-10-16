@@ -150,10 +150,20 @@ func (c *Client) readResponse(method string, resp *http.Response) (Response, err
 		}
 	}
 	if p, ok := value["error"].(map[string]any); ok {
-		return r, providerError(p, method)
+		e := providerError(p, method)
+		e.HTTPStatus = resp.StatusCode
+		if method != "GET" && resp.StatusCode >= 500 {
+			e.Code, e.Exit = "MUTATION_UNKNOWN", 10
+		}
+		return r, e
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		e := output.Fail("PROVIDER", "Graph returned an unsuccessful HTTP response.", 8)
+		e := output.Fail("PROVIDER", fmt.Sprintf("Graph returned HTTP %d.", resp.StatusCode), 8)
+		e.HTTPStatus = resp.StatusCode
+		if resp.StatusCode == http.StatusRequestEntityTooLarge {
+			e.Message = "Graph returned HTTP 413: the request body was rejected as too large."
+			e.SuggestedAction = "Reduce the upload copy or use meta videos upload --mode resumable."
+		}
 		e.Retryable = method == "GET" && (resp.StatusCode == 429 || resp.StatusCode >= 500)
 		if resp.StatusCode == 429 {
 			e.Code = "THROTTLED"
@@ -162,6 +172,7 @@ func (c *Client) readResponse(method string, resp *http.Response) (Response, err
 		if method != "GET" && resp.StatusCode >= 500 {
 			e.Code = "MUTATION_UNKNOWN"
 			e.Exit = 10
+			e.SuggestedAction = "Reconcile the existing mutation before retrying."
 		}
 		return r, e
 	}

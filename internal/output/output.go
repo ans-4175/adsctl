@@ -15,6 +15,7 @@ type Error struct {
 	Code            string `json:"code"`
 	Message         string `json:"message"`
 	Retryable       bool   `json:"retryable"`
+	HTTPStatus      int    `json:"http_status,omitempty"`
 	Provider        any    `json:"provider,omitempty"`
 	SuggestedAction string `json:"suggested_action,omitempty"`
 	Exit            int    `json:"-"`

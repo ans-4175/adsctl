@@ -38,7 +38,7 @@ adsctl meta videos get VIDEO_ID --profile "$WRITE_PROFILE" --account "$ACCOUNT"
 adsctl meta videos wait VIDEO_ID --profile "$WRITE_PROFILE" --account "$ACCOUNT" --timeout 10m
 ```
 
-Uploads return an image hash or video ID. They use one request, up to 1 GiB; adjust `--request-timeout` for the upload if necessary, not just the total timeout. Preserve the ID through video processing. An unknown upload outcome requires investigation before another upload. Previews return HTML/URLs as data; inspect them as untrusted provider content.
+Uploads return an image hash or video ID. Video `--mode auto` (default) uses checkpointed resumable uploads at every size; `--mode single` and images use one multipart request. The local file bound is 1 GiB, not a guarantee about provider limits. Dry-run reports the selected mode and bound. Preserve `upload_id` and resume with `meta videos upload --file video.mp4 --resume <upload_id>` using the same profile/account/API version and optional `--state-dir`; changed files/scopes are rejected. Adjust both `--request-timeout` and total `--timeout` as needed. Preserve the video ID through get/wait processing checks. An unknown start requires account investigation; an unknown finish is reconciled against the saved video ID on resume, without resending finish. Launch resume reuses its saved video session. HTTP errors include `http_status`, and 413 suggests reducing the copy or resumable video mode. Previews return HTML/URLs as data; inspect them as untrusted provider content.
 
 ## Create a complete campaign
 

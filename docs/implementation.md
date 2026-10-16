@@ -15,7 +15,7 @@ The initial executable covers all Meta command groups in the original design. Th
 | Snapshots | Campaign/ad set/ad/creative configuration, scoped complete diffs | Inventory is not a transactional provider snapshot; no inferred deletion from incomplete data |
 | Mutations | Create/update/delete, pause/activate/archive, budgets, creative references, receipts | Supported native field subset; nested provider conditions are not exhaustively modeled |
 | Validation | Local types/required fields, explicit ownership/parent reads, planned dependencies | Meta validation-only is not called; missing future parent validation is deferred |
-| Media | Streaming image/video upload; scoped video get/wait | Single-request upload, at most 1 GiB; no resumable chunk protocol; per-request timeout is configurable |
+| Media | Streaming images and checkpointed resumable videos; scoped video get/wait | Local 1 GiB file bound; video auto mode is resumable at every size, explicit single mode available; bounded transfer recovery, ambiguous start/finish reconciliation, configurable request/total deadlines |
 | Launch | Template, plan/apply/status/resume/reconcile/activate, local run listing | Starter template is traffic/image; strict observed-field matching can block on provider normalization; image reconciliation verifies membership, not original byte identity |
 | Output | JSON, JSONL records, generic tables, CSV export, errors/exits | Fetch results are buffered within bounds; generic tables have no colors |
 | State | Private files, atomic replacement, local OS file locking | Persistent execution requires macOS/Linux; no distributed coordination or cross-directory deduplication |

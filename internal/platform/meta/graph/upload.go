@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -21,9 +22,6 @@ func (c *Client) Upload(ctx context.Context, account, kind, path string) (Respon
 	if kind != "images" && kind != "videos" {
 		return Response{}, output.Fail("USAGE", "Unsupported media type.", 2)
 	}
-	if err := c.pace(ctx); err != nil {
-		return Response{}, err
-	}
 	f, err := os.Open(path)
 	if err != nil {
 		return Response{}, output.Fail("INPUT", "Cannot open upload file.", 2)
@@ -33,41 +31,54 @@ func (c *Client) Upload(ctx context.Context, account, kind, path string) (Respon
 	if err != nil || !info.Mode().IsRegular() || info.Size() == 0 || info.Size() > 1<<30 {
 		return Response{}, output.Fail("INPUT", "Upload requires a nonempty regular file at most 1 GiB.", 2)
 	}
+	field := map[string]string{"images": "filename", "videos": "source"}[kind]
+	return c.uploadMultipart(ctx, account, kind, field, path, f, info.Size(), nil)
+}
+
+func (c *Client) uploadMultipart(ctx context.Context, account, kind, field, path string, source io.Reader, size int64, params url.Values) (Response, error) {
+	if err := c.pace(ctx); err != nil {
+		return Response{}, err
+	}
 	base, err := url.Parse(c.BaseURL)
 	if err != nil || base.Host == "" {
 		return Response{}, output.Fail("CONFIG", "Invalid Graph base URL.", 2)
 	}
 	base.Path = strings.TrimRight(base.Path, "/") + "/" + c.Version + "/" + account + map[string]string{"images": "/adimages", "videos": "/advideos"}[kind]
-	reader, writer := io.Pipe()
-	multi := multipart.NewWriter(writer)
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		if c.AppSecret != "" {
-			h := hmac.New(sha256.New, []byte(c.AppSecret))
-			_, _ = h.Write([]byte(c.Token))
-			if e := multi.WriteField("appsecret_proof", hex.EncodeToString(h.Sum(nil))); e != nil {
-				_ = writer.CloseWithError(e)
-				return
+	// Buffer only the multipart framing. The file range stays streamed, and
+	// Content-Length makes the request boundary explicit on every transport.
+	var framing bytes.Buffer
+	multi := multipart.NewWriter(&framing)
+	if c.AppSecret != "" {
+		h := hmac.New(sha256.New, []byte(c.AppSecret))
+		_, _ = h.Write([]byte(c.Token))
+		if err = multi.WriteField("appsecret_proof", hex.EncodeToString(h.Sum(nil))); err != nil {
+			return Response{}, err
+		}
+	}
+	for key, values := range params {
+		for _, value := range values {
+			if err = multi.WriteField(key, value); err != nil {
+				return Response{}, err
 			}
 		}
-		field := map[string]string{"images": "filename", "videos": "source"}[kind]
-		part, e := multi.CreateFormFile(field, filepath.Base(path))
-		if e == nil {
-			_, e = io.Copy(part, f)
-		}
-		if e == nil {
-			e = multi.Close()
-		}
-		_ = writer.CloseWithError(e)
-	}()
-	defer func() { _ = reader.Close(); <-done }()
+	}
+	if _, err = multi.CreateFormFile(field, filepath.Base(path)); err != nil {
+		return Response{}, err
+	}
+	prefix := append([]byte(nil), framing.Bytes()...)
+	framing.Reset()
+	if err = multi.Close(); err != nil {
+		return Response{}, err
+	}
+	suffix := framing.Bytes()
+	body := io.MultiReader(bytes.NewReader(prefix), io.LimitReader(source, size), bytes.NewReader(suffix))
 	reqCtx, cancel := context.WithTimeout(ctx, c.RequestTimeout)
 	defer cancel()
-	req, err := http.NewRequestWithContext(reqCtx, "POST", base.String(), reader)
+	req, err := http.NewRequestWithContext(reqCtx, "POST", base.String(), body)
 	if err != nil {
 		return Response{}, err
 	}
+	req.ContentLength = int64(len(prefix)+len(suffix)) + size
 	req.Header.Set("Content-Type", multi.FormDataContentType())
 	req.Header.Set("Authorization", "Bearer "+c.Token)
 	req.Header.Set("User-Agent", "adsctl/0.1")
