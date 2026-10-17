@@ -3,6 +3,7 @@
   "version": "0.0.0-development",
   "private": true,
   "description": "Release tooling for the adsctl Go CLI",
+  "license": "MIT",
   "engines": {
     "node": ">=24.10.0"
   },

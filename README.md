@@ -254,3 +254,8 @@ Exit codes: 0 success; 1 internal; 2 usage/config; 3 credentials; 4 permission/s
 **Live Meta validation remains outstanding.** No credentials were supplied, so fixtures establish CLI behavior, not live account compatibility. v25.0 is the initial compatibility target; version overrides are exposed but this is not a tested cross-version matrix. Account-specific permissions, objectives, breakdown availability, special categories, creative requirements and normalized response shapes still require live smoke testing. Google, automatic optimization, token refresh, remote validation-only execution, distributed locking and built-in scheduling are not implemented. No command automatically applies provider recommendations.
 
 See [the original architecture](docs/design.md), [the full UX specification](docs/cli-reference.md), [implementation status and verification](docs/implementation.md), [Meta research](docs/meta-research.md), [glossary](CONTEXT.md), and [output ADR](docs/adr/0001-agent-output-contract.md).
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
+
