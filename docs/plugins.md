@@ -1,4 +1,4 @@
-# Codex and Claude Code plugin
+# Codex, Claude Code, and Google Antigravity plugin
 
 The `adsctl` plugin bundles three shared skills: `adsctl-setup` for CLI installation and Meta credentials, `adsctl-meta-analyst` for structured campaign performance audits and funnel diagnostics, and `adsctl` for reporting, monitoring, and authorized management. The repository root is the plugin root. Host-specific manifests point to the same `skills/` tree; no MCP server or connector is required.
 
@@ -42,6 +42,23 @@ claude plugin details adsctl
 
 After publication, use `claude plugin marketplace add imrenagicom/adsctl` instead of the local path. Inside Claude Code, the equivalent commands begin with `/plugin marketplace add` and `/plugin install`. Start a new session, then invoke `/adsctl:adsctl-setup` for setup, `/adsctl:adsctl-meta-analyst` for campaign performance audits, or `/adsctl:adsctl` for operations. For temporary development without installation, use `claude --plugin-dir /absolute/path/to/adsctl`.
 
+## Google Antigravity
+
+From the checkout or extracted plugin package:
+
+```sh
+agy plugin install /absolute/path/to/adsctl
+agy plugin list --json
+```
+
+After publication to GitHub, install directly from the repository URL:
+
+```sh
+agy plugin install https://github.com/imrenagicom/adsctl
+```
+
+Inside an interactive Antigravity CLI session, run `/plugin install /absolute/path/to/adsctl` (or select *Install from local directory* in the `/plugin` manager). Installed plugins are staged under `~/.gemini/config/plugins/adsctl/` and synchronized across the Antigravity App, IDE, and CLI; restart if newly installed skills do not appear immediately. When opening the `adsctl` repository itself as a workspace in Antigravity, `.agents/skills.json` automatically registers `skills/adsctl`, `skills/adsctl-meta-analyst`, and `skills/adsctl-setup` without requiring global installation.
+
 ## Verify and maintain the package
 
 Run maintainer checks from a source checkout:
@@ -52,13 +69,14 @@ make installer-check
 claude plugin validate .claude-plugin/plugin.json --strict
 claude plugin validate .claude-plugin/marketplace.json --strict
 claude plugin validate skills --strict
+agy plugin validate .
 make release-snapshot
 ```
 
-`plugin-check` needs Python 3.9 or later and checks identity/version consistency, both marketplace paths, onboarding, and packaged skill references. `release-snapshot` also verifies that all six archives contain both manifests, both catalogs, the CLI, and the complete skill resources. Claude's native validator and Codex's marketplace discovery provide host-specific checks; the Python check is a packaging check, not a substitute for either host parser.
+`plugin-check` needs Python 3.9 or later and checks identity/version consistency across all three manifests, both marketplace catalogs, workspace skill configuration, onboarding, and packaged skill references. `release-snapshot` also verifies that all six archives contain the manifests, catalogs, workspace skill config, the CLI, and the complete skill resources. Claude's native validator, Antigravity's native validator, and Codex's marketplace discovery provide host-specific checks; the Python check is a packaging check, not a substitute for host parsers.
 
-Native inventory checks were performed with Codex CLI 0.162.1 and Claude Code 2.1.293. Both discovered `adsctl` and `adsctl-setup`; Claude's local marketplace installation was exercised with temporary settings. These checks do not call Meta or establish credential access.
+Native inventory checks were performed with Codex CLI 0.162.1, Claude Code 2.1.293, and Antigravity CLI (`agy`). All three discovered the packaged skills. These checks do not call Meta or establish credential access.
 
-The plugin has an independent version in both host manifests. Bump both together when changing the plugin skills, manifests, or bundled resources so cached Git installs can receive the update. CLI versions continue to come from release tags. Refresh the registered marketplace and update/reinstall the plugin after publishing a plugin version change. Earlier CLI releases without these manifests are standalone CLI/skill distributions.
+The plugin has an independent version in the host manifests (`plugin.json`, `.codex-plugin/plugin.json`, and `.claude-plugin/plugin.json`). Bump all three together when changing the plugin skills, manifests, or bundled resources so cached Git installs can receive the update. CLI versions continue to come from release tags. Refresh the registered marketplace and update/reinstall the plugin after publishing a plugin version change. Earlier CLI releases without these manifests are standalone CLI/skill distributions.
 
-The layouts follow the official [Codex plugin packaging](https://developers.openai.com/plugins/build/plugins), [desktop-only plugin](https://developers.openai.com/plugins/deploy/desktop-only), [Claude plugin manifest](https://code.claude.com/docs/en/plugins-reference), and [Claude marketplace](https://code.claude.com/docs/en/plugin-marketplaces) documentation.
+The layouts follow the official [Codex plugin packaging](https://developers.openai.com/plugins/build/plugins), [desktop-only plugin](https://developers.openai.com/plugins/deploy/desktop-only), [Claude plugin manifest](https://code.claude.com/docs/en/plugins-reference), [Claude marketplace](https://code.claude.com/docs/en/plugin-marketplaces), and [Google Antigravity plugins](https://antigravity.google/docs/plugins) documentation.

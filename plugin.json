@@ -1,0 +1,12 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+  "name": "adsctl",
+  "displayName": "adsctl",
+  "version": "0.3.0",
+  "description": "Set up adsctl and inspect, audit, report on, monitor, and manage Meta advertising with explicit account scope.",
+  "suggestedPrompts": [
+    "Use the adsctl setup skill to install the CLI and configure Meta API access.",
+    "Use adsctl-meta-analyst to evaluate our running Meta campaign performance and recommend next actions.",
+    "Use adsctl to summarize performance for my selected Meta ad account."
+  ]
+}

@@ -34,10 +34,12 @@ archives:
       - skills/adsctl/**
       - skills/adsctl-setup/**
       - skills/adsctl-meta-analyst/**
+      - plugin.json
       - .codex-plugin/plugin.json
       - .claude-plugin/plugin.json
       - .claude-plugin/marketplace.json
       - .agents/plugins/marketplace.json
+      - .agents/skills.json
 
 checksum:
   name_template: checksums.txt

@@ -37,9 +37,9 @@ Set an absolute `ADSCTL_HOME` to use another directory. The installer and CLI us
 
 The curl endpoint becomes available in the first release that publishes `install.sh`; older release archives remain available for manual installation.
 
-## Codex and Claude Code plugin
+## Codex, Claude Code, and Google Antigravity plugin
 
-The repository is also an `adsctl` plugin for Codex and Claude Code, bundling all three skills. Register a local checkout or extracted plugin distribution and install it:
+The repository is also an `adsctl` plugin for Codex, Claude Code, and Google Antigravity, bundling all three skills. Register or install from a local checkout or extracted plugin distribution:
 
 ```sh
 # Codex
@@ -49,9 +49,12 @@ codex plugin add adsctl@adsctl
 # Claude Code
 claude plugin marketplace add /absolute/path/to/adsctl
 claude plugin install adsctl@adsctl
+
+# Google Antigravity
+agy plugin install /absolute/path/to/adsctl
 ```
 
-Run the setup workflow in Codex or `/adsctl:adsctl-setup` in Claude Code, then use `/adsctl:adsctl-meta-analyst` for campaign performance audits or `/adsctl:adsctl` for general reporting and management operations. The CLI must be available on the agent host's PATH and Meta credentials must be supplied separately. See [plugin installation and verification](docs/plugins.md) for GitHub installation, development, updates, and platform requirements.
+Run the setup workflow in Codex or Antigravity (`adsctl-setup`, or `/adsctl:adsctl-setup` in Claude Code), then use the campaign performance audit skill (`adsctl-meta-analyst`, or `/adsctl:adsctl-meta-analyst` in Claude Code) or the operations skill (`adsctl`, or `/adsctl:adsctl` in Claude Code). The CLI must be available on the agent host's PATH and Meta credentials must be supplied separately. See [plugin installation and verification](docs/plugins.md) for GitHub installation, development, updates, and platform requirements.
 
 ## Build and verify
 
@@ -70,7 +73,7 @@ CI repeats these checks on pull requests and pushes. Tests use local HTTP fixtur
 
 ## Distributions and releases
 
-GitHub [releases](https://github.com/imrenagicom/adsctl/releases) contain binaries for Linux, macOS (`darwin`) and Windows, each for x86-64 (`amd64`) and ARM64 (`arm64`). Linux/macOS downloads are `.tar.gz`; Windows downloads are `.zip`. Distributions include both plugin manifests, marketplace catalogs, shared skills, and installation instructions alongside the binary. `checksums.txt` records SHA-256 hashes. Earlier releases may contain only the CLI and skills. Windows persistent launch/monitor execution remains unsupported as described above.
+GitHub [releases](https://github.com/imrenagicom/adsctl/releases) contain binaries for Linux, macOS (`darwin`) and Windows, each for x86-64 (`amd64`) and ARM64 (`arm64`). Linux/macOS downloads are `.tar.gz`; Windows downloads are `.zip`. Distributions include the plugin manifests, marketplace catalogs, shared skills, and installation instructions alongside the binary. `checksums.txt` records SHA-256 hashes. Earlier releases may contain only the CLI and skills. Windows persistent launch/monitor execution remains unsupported as described above.
 
 GoReleaser v2.18.3 builds the distributions with CGO disabled and injects the version through `-X adsctl/internal/cli.version=...`. `adsctl version` reports that value in its normal JSON envelope. Local builds default to `dev`; override it with `make build VERSION=0.1.0` or `make install VERSION=0.1.0`.
 

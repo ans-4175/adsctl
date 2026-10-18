@@ -10,8 +10,9 @@ import zipfile
 
 
 ROOT = Path(__file__).resolve().parent.parent
-MANIFESTS = (".codex-plugin/plugin.json", ".claude-plugin/plugin.json")
+MANIFESTS = (".codex-plugin/plugin.json", ".claude-plugin/plugin.json", "plugin.json")
 CATALOGS = (".agents/plugins/marketplace.json", ".claude-plugin/marketplace.json")
+SKILLS_CONFIG = ".agents/skills.json"
 
 
 def require(condition, message):
@@ -20,19 +21,31 @@ def require(condition, message):
 
 
 def check_source():
-    codex, claude = [json.loads((ROOT / path).read_text()) for path in MANIFESTS]
-    for key in ("name", "version", "description", "author", "repository"):
-        require(codex.get(key) == claude.get(key) and codex.get(key),
+    codex, claude, antigravity = [json.loads((ROOT / path).read_text()) for path in MANIFESTS]
+    for key in ("name", "version", "description"):
+        require(codex.get(key) == claude.get(key) == antigravity.get(key) and codex.get(key),
                 f"Plugin manifests must have matching {key}")
+    for key in ("author", "repository"):
+        require(codex.get(key) == claude.get(key) and codex.get(key),
+                f"Codex and Claude manifests must have matching {key}")
     require(codex["name"] == "adsctl", "Unexpected plugin identity")
     require(re.fullmatch(r"\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?", codex["version"]),
             "Plugin version must be semantic")
+    require(antigravity.get("$schema") == "https://antigravity.google/schemas/v1/plugin.json",
+            "Antigravity manifest must declare the v1 plugin schema")
+    require(antigravity.get("displayName") == codex["interface"]["displayName"],
+            "Antigravity displayName must match Codex")
+    require(antigravity.get("suggestedPrompts") == codex["interface"]["defaultPrompt"],
+            "Antigravity suggestedPrompts must match Codex")
     require(codex.get("skills") == "./skills/", "Codex must load the shared skills")
     require(codex.get("requires_local_executor") is True,
             "The CLI plugin needs a local executor")
     onboarding = codex["extensions"]["com.openai"]["onboardingSkill"]
     require(onboarding == "./skills/adsctl-setup/SKILL.md" and (ROOT / onboarding).is_file(),
             "Onboarding must point to the packaged setup skill")
+    skills_config = json.loads((ROOT / SKILLS_CONFIG).read_text())
+    require(skills_config == {"entries": [{"path": "skills"}]},
+            "Workspace skills.json must point to ./skills")
     skills = {p.parent.name for p in (ROOT / "skills").glob("*/SKILL.md")}
     require(skills == {"adsctl", "adsctl-setup", "adsctl-meta-analyst"},
             "All shared skills must be discoverable")
@@ -51,7 +64,7 @@ def check_source():
                 target = (doc.parent / link.split("#")[0]).resolve()
                 require(target.is_relative_to(ROOT / "skills") and target.is_file(),
                         f"Missing or external skill reference in {doc}: {link}")
-    print(f"Plugin {codex['name']} {codex['version']}: both catalogs and skills checked")
+    print(f"Plugin {codex['name']} {codex['version']}: manifests, catalogs, and skills checked")
 
 
 def check_archive(path):
@@ -67,7 +80,7 @@ def check_archive(path):
     roots = [name[:-len(MANIFESTS[0])] for name in files if name.endswith(MANIFESTS[0])]
     require(len(roots) == 1, f"Expected one plugin root in {path.name}")
     prefix = roots[0]
-    required = [*MANIFESTS, *CATALOGS, "LICENSE", "README.md", "docs/plugins.md", "install.sh"]
+    required = [*MANIFESTS, *CATALOGS, SKILLS_CONFIG, "LICENSE", "README.md", "docs/plugins.md", "install.sh"]
     required.extend(p.relative_to(ROOT).as_posix()
                     for p in (ROOT / "skills").rglob("*") if p.is_file())
     for relative in required:
