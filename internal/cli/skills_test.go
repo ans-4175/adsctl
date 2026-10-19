@@ -95,4 +95,7 @@ func TestRootRejectsUnknownCommandAndExtraSkillArgs(t *testing.T) {
 	if code, out, _ := runSkills(t, "--help"); code != 0 || !strings.Contains(out, "--skills") {
 		t.Fatal("root help should mention --skills")
 	}
+	if code, out, _ := runSkills(t, "docs"); code != 0 || !strings.HasPrefix(out, skillsHint) || !strings.Contains(out, "## `adsctl commands") {
+		t.Fatal("docs should point to --skills before the command reference")
+	}
 }

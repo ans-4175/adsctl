@@ -15,6 +15,9 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
+// skillsHint points readers of command lists to the bundled workflows.
+const skillsHint = "Step-by-step agent workflows are bundled with this binary: run `adsctl --skills` to list them and `adsctl --skills NAME` to read one.\n\n"
+
 // skillsFS is the skills/ tree embedded at build time.
 var skillsFS fs.FS = adsctl.Skills
 
